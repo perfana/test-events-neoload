@@ -1,0 +1,164 @@
+import org.gradle.internal.os.OperatingSystem
+
+import java.time.Duration
+
+plugins {
+    id 'java'
+    id 'signing'
+    id 'maven-publish'
+    id 'io.github.gradle-nexus.publish-plugin' version '2.0.0'
+    // check dependency updates: ./gradlew dependencyUpdates -Drevision=release
+    id 'com.github.ben-manes.versions' version '0.51.0'
+    id 'com.github.hierynomus.license' version '0.16.1'
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+group = 'io.perfana'
+version = file("VERSION").readLines().first()
+description = 'test-events-neoload'
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+dependencies {
+
+    ext.jacksonVersion="2.17.0"
+    ext.httpClientVersion="4.5.14"
+    ext.lombokVersion="1.18.32"
+    ext.swaggerVersion="2.2.21"
+
+    implementation "com.github.stephenc.jcip:jcip-annotations:1.0-1"
+    implementation "io.perfana:event-scheduler:4.0.3"
+    implementation "org.apache.httpcomponents:httpclient:$httpClientVersion"
+    implementation "org.apache.httpcomponents:httpmime:$httpClientVersion"
+    implementation "com.fasterxml.jackson.core:jackson-core:$jacksonVersion"
+    implementation "com.fasterxml.jackson.core:jackson-annotations:$jacksonVersion"
+    implementation "com.fasterxml.jackson.core:jackson-databind:$jacksonVersion"
+    implementation "io.swagger.core.v3:swagger-annotations:$swaggerVersion"
+    implementation "jakarta.annotation:jakarta.annotation-api:2.1.1"
+    implementation 'jakarta.validation:jakarta.validation-api:3.0.2'
+
+
+    // for correct date time parsing in json
+    implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:$jacksonVersion"
+    testImplementation "org.junit.jupiter:junit-jupiter-engine:5.10.2"
+    testImplementation "org.wiremock:wiremock:3.5.2"
+    compileOnly "org.projectlombok:lombok:$lombokVersion"
+    annotationProcessor "org.projectlombok:lombok:$lombokVersion"
+    // enable logging in tests, e.g. to see HttpClient traffic, see test resource logback.xml
+    testImplementation "org.slf4j:jcl-over-slf4j:2.0.12"
+    testImplementation "ch.qos.logback:logback-classic:1.5.3"
+
+}
+
+publishing {
+    publications {
+        maven(MavenPublication) {
+            from(components.java)
+        }
+    }
+}
+
+// ossrh requires javadoc and sources https://central.sonatype.org/pages/requirements.html
+java {
+    withJavadocJar()
+    withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+tasks.withType(Test) {
+    useJUnitPlatform()
+}
+
+tasks.withType(Javadoc).configureEach {
+    // suppress warnings about missing javadoc: breaks build
+    ((CoreJavadocOptions) options).addStringOption("Xdoclint:none", "-quiet")
+}
+
+license {
+    // license check is broken on windows, skip
+    if (OperatingSystem.current().isWindows()) ignoreFailures = true
+    ext.year = Calendar.getInstance().get(Calendar.YEAR)
+    ext.name = 'Peter Paul Bakker, Perfana'
+
+    header = file("src/main/resources/META-INF/LICENSE.txt")
+
+    excludes(["**/*.txt", "src/main/resources/META-INF/services/**"])
+
+    mapping {
+        // the standard java style makes intellij complain about dangling javadoc
+        java = "SLASHSTAR_STYLE"
+    }
+    ignoreFailures = false
+    strictCheck = true
+}
+
+// https://docs.gradle.org/current/userguide/signing_plugin.html
+// this only configures signing if the key is found
+def hasSigningKey = project.hasProperty("signingKeyId") || project.hasProperty("signingKey")
+if(hasSigningKey) {
+    sign(project)
+}
+void sign(Project project) {
+    project.signing {
+        required { project.gradle.taskGraph.hasTask("publish") }
+        def signingKeyId = project.findProperty("signingKeyId")
+        def signingKey = project.findProperty("signingKey")
+        def signingPassword = project.findProperty("signingPassword")
+        if (signingKeyId) {
+            useInMemoryPgpKeys(signingKeyId, signingKey, signingPassword)
+        } else if (signingKey) {
+            useInMemoryPgpKeys(signingKey, signingPassword)
+        }
+        sign publishing.publications.maven
+    }
+}
+
+// customize the pom so it complies to Maven central requirements https://central.sonatype.org/pages/requirements.html
+// https://docs.gradle.org/current/userguide/maven_plugin.html#sec:maven_pom_generation
+project.plugins.withType(MavenPublishPlugin).all {
+    PublishingExtension publishing = project.extensions.getByType(PublishingExtension)
+    publishing.publications.withType(MavenPublication).all { mavenPublication ->
+        mavenPublication.pom {
+            name = "${project.group}:${project.name}"
+            description = name
+            url = "https://github.com/perfana/test-events-neoload.git"
+            licenses {
+                license {
+                    name = "The Apache License, Version 2.0"
+                    url = "https://www.apache.org/licenses/LICENSE-2.0"
+                }
+            }
+            developers {
+                developer {
+                    id = 'peter.paul.bakker'
+                    name = 'Peter Paul Bakker'
+                    email = 'peter.paul@perfana.io'
+                }
+            }
+            scm {
+                connection = "scm:git:https://github.com/perfana/test-events-neoload.git"
+                developerConnection = "scm:git:git@github.com:perfana/test-events-neoload.git"
+                url = "https://github.com/perfana/test-events-neoload.git"
+            }
+        }
+    }
+}
+
+nexusPublishing {
+    repositories {
+        sonatype()
+    }
+    // Prevent "java.net.SocketTimeoutException: timeout", when Sonatype is slow.
+    connectTimeout = Duration.ofMinutes(3)
+    clientTimeout = Duration.ofMinutes(3)
+}
