@@ -29,6 +29,7 @@ import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -43,12 +44,10 @@ class NeoloadClientLiveTest {
     private NeoloadClient createRealNeoloadClient() {
         String neoloadAccountToken = System.getenv("NEOLOAD_ACCOUNT_TOKEN");
 
-        NeoloadClient client =
-            new NeoloadClient(
-                    "https://neoload-v2.saas.neotys.com/v4",
-                    neoloadAccountToken,
-                    EventLoggerStdOut.INSTANCE_DEBUG);
-        return client;
+        return new NeoloadClient(
+                "https://neoload-v2.saas.neotys.com/v4",
+                neoloadAccountToken,
+                EventLoggerStdOut.INSTANCE_DEBUG);
     }
 
     @Test
@@ -141,7 +140,7 @@ class NeoloadClientLiveTest {
     }
 
     @Test
-    @Disabled("only works with real influxdb to connect to")
+    //@Disabled("only works with real influxdb to connect to")
     void testResults() {
         NeoloadClient client = createRealNeoloadClient();
 
@@ -155,6 +154,63 @@ class NeoloadClientLiveTest {
         }
 
         assertNotNull(result);
+    }
+
+    @Test
+    //@Disabled("only works with real influxdb to connect to")
+    void getResultElementValues() {
+        NeoloadClient client = createRealNeoloadClient();
+
+        String resultId = "bf990cfc-14f8-4765-99bb-140c353ca782";
+
+        GetResultElementValuesResponse response = client.getResultElementsValues(resultId);
+
+        List<ResultElementValue> items = response.getItems();
+        for (ResultElementValue item : items) {
+            System.out.println(item);
+        }
+
+        assertNotNull(response);
+    }
+
+    @Test
+        //@Disabled("only works with real influxdb to connect to")
+    void getResultElementTimeSeriesAll() {
+        NeoloadClient client = createRealNeoloadClient();
+
+        String resultId = "bf990cfc-14f8-4765-99bb-140c353ca782";
+
+        GetResultElementValuesResponse response = client.getResultElementsValues(resultId);
+
+        List<ResultElementValue> items = response.getItems();
+        // items collect to map
+        Map<String, String> nameToIds = items.stream()
+                .collect(Collectors.toMap(ResultElementValue::getName, ResultElementValue::getId));
+
+        // for each map entry
+        for (Map.Entry<String, String> entry : nameToIds.entrySet()) {
+            String name = entry.getKey();
+            String id = entry.getValue();
+            ElementTimeSeries timeseries = client.getResultElementTimeSeries(resultId, id);
+            assertNotNull(timeseries);
+            System.out.println("Name: " + name);
+            System.out.println("Timeseries: " + timeseries);
+        }
+
+        assertNotNull(response);
+    }
+
+    @Test
+        //@Disabled("only works with real influxdb to connect to")
+    void getResultElementTimeSeries() {
+        NeoloadClient client = createRealNeoloadClient();
+
+        String resultId = "bf990cfc-14f8-4765-99bb-140c353ca782";
+        String elementId = "29259a3e-ae5a-4724-b12d-33801d264d3a";
+
+        ElementTimeSeries timeseries = client.getResultElementTimeSeries(resultId, elementId);
+        assertNotNull(timeseries);
+        System.out.println("Timeseries: " + timeseries);
     }
 
     @Test

@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.perfana.event.neoload.model.*;
+import io.perfana.event.neoload.model.UserPathElement.StatisticsEnum;
 import io.perfana.eventscheduler.api.EventLogger;
 import org.apache.http.HttpHost;
 import org.apache.http.HttpResponse;
@@ -56,15 +57,17 @@ public class NeoloadClient {
     private final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
-            .setSerializationInclusion(JsonInclude.Include.NON_NULL);;
+            .setSerializationInclusion(JsonInclude.Include.NON_NULL);
 
     private final ObjectReader currentUserReader = objectMapper.readerFor(CurrentUser.class);
     private final ObjectReader testPageReader = objectMapper.readerFor(TestPage.class);
     private final ObjectReader testExecutionReader = objectMapper.readerFor(TestExecution.class);
-    private final ObjectReader resultTimeseriesReader = objectMapper.readerFor(ResultTimeseries.class);
+    private final ObjectReader resultTimeSeriesReader = objectMapper.readerFor(ResultTimeseries.class);
     private final ObjectReader getTestExecutionsResponseReader = objectMapper.readerFor(GetTestExecutionResponse.class);
     private final ObjectReader testResultPageReader = objectMapper.readerFor(TestResultPage.class);
     private final ObjectReader testReader = objectMapper.readerFor(Test.class);
+    private final ObjectReader getResultElementValuesResponseReader = objectMapper.readerFor(GetResultElementValuesResponse.class);
+    private final ObjectReader elementTimeSeriesReader = objectMapper.readerFor(ElementTimeSeries.class);
 
     private final HttpClient httpClient;
     private final String baseUrl;
@@ -255,10 +258,6 @@ public class NeoloadClient {
 
     /**
      * Start scraping live data.
-     *
-     * @param testId
-     * @param series
-     * @return
      */
     public ResultTimeseries resultsTimeseries(String testId, List<String> series, String nextRequestToken) {
         notEmpty(testId, "testId");
@@ -281,7 +280,7 @@ public class NeoloadClient {
             String result = responseToString(response);
             logger.debug(result);
 
-            return resultTimeseriesReader.readValue(result);
+            return resultTimeSeriesReader.readValue(result);
 
         } catch (URISyntaxException | IOException e) {
             throw new NeoloadClientException("call to Neoload failed", e);
@@ -311,7 +310,7 @@ public class NeoloadClient {
     public TestResultPage results(String workspaceId) {
         notEmpty(workspaceId, "workspaceId");
 
-        String uri = String.format("%s/results", baseUrl, workspaceId);
+        String uri = String.format("%s/results", baseUrl);
 
         try {
             URIBuilder uriBuilder = new URIBuilder(uri);
@@ -350,6 +349,56 @@ public class NeoloadClient {
             logger.debug(result);
 
             return testReader.readValue(result);
+        } catch (URISyntaxException | IOException e) {
+            throw new NeoloadClientException("call to Neoload failed", e);
+        }
+    }
+
+    public GetResultElementValuesResponse getResultElementsValues(String resultId) {
+        String uri = String.format("%s/results/%s/elements/values", baseUrl, resultId);
+
+        try {
+            URIBuilder uriBuilder = new URIBuilder(uri);
+            uriBuilder.setParameter("elementType", ElementsValuesFilter.ElementTypeEnum.TRANSACTION.getValue());
+            uriBuilder.setParameter("sort", "-name");
+            uriBuilder.setParameter("pageNumber", "0");
+            uriBuilder.setParameter("pageSize", "100");
+
+            HttpGet get = new HttpGet(uriBuilder.build());
+            get.setHeader("accountToken", accountToken);
+            get.setHeader("accept", "application/json");
+
+            HttpResponse response = executeRequest(get);
+            String result = responseToString(response);
+            logger.debug(result);
+
+            return getResultElementValuesResponseReader.readValue(result);
+        } catch (URISyntaxException | IOException e) {
+            throw new NeoloadClientException("call to Neoload failed", e);
+        }
+    }
+
+    public ElementTimeSeries getResultElementTimeSeries(String resultId, String elementId) {
+        String uri = String.format("%s/results/%s/elements/%s/timeseries", baseUrl, resultId, elementId);
+
+        try {
+            URIBuilder uriBuilder = new URIBuilder(uri);
+            for (StatisticsEnum value : StatisticsEnum.values()) {
+                if (value != StatisticsEnum.PERCENTILES) {
+                    uriBuilder.addParameter("statistics", value.getValue());
+                }
+            }
+            uriBuilder.addParameter("statistics", "count");
+
+            HttpGet get = new HttpGet(uriBuilder.build());
+            get.setHeader("accountToken", accountToken);
+            get.setHeader("accept", "application/json");
+
+            HttpResponse response = executeRequest(get);
+            String result = responseToString(response);
+            logger.debug(result);
+
+            return elementTimeSeriesReader.readValue(result);
         } catch (URISyntaxException | IOException e) {
             throw new NeoloadClientException("call to Neoload failed", e);
         }
