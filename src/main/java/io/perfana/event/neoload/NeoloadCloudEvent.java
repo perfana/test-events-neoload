@@ -116,10 +116,11 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
 
             Map<String, ElementPoint> elementIdToLastPoint = new HashMap<>();
             Map<String, String> elementIdToNextRequestToken = new HashMap<>();
-            Map<String, String> tags = Map.of(
-                    "systemUnderTest", testContext.getSystemUnderTest(),
-                    "testEnvironment", testContext.getTestEnvironment(),
-                    "workload", testContext.getWorkload());
+
+            Map<String, String> tags = new HashMap<>();
+            tags.put("systemUnderTest", testContext.getSystemUnderTest());
+            tags.put("testEnvironment", testContext.getTestEnvironment());
+            tags.put("workload", testContext.getWorkload());
 
             logger.info("Start thread to send series to Influx");
 
@@ -162,8 +163,10 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                                     previousLastPoint = points.get(points.size() - 1);
                                     elementIdToLastPoint.put(elementId, previousLastPoint);
                                     logger.info("Sending " + points.size() + " points to InfluxDB for element: " + name);
+
+                                    tags.put("name", name);
+
                                     influxWriter.get().uploadElementPointsTimeSeriesToInfluxDB(
-                                            name,
                                             points,
                                             testStartTime.get(),
                                             tags);

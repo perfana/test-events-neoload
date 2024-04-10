@@ -50,7 +50,6 @@ public class NeoloadInfluxWriter {
     }
 
     public void uploadElementPointsTimeSeriesToInfluxDB(
-            String transactionName,
             List<ElementPoint> points,
             Instant startTime,
             Map<String, String> tags) {
@@ -72,7 +71,7 @@ public class NeoloadInfluxWriter {
             fields.computeIfAbsent("errorRate", v -> point.getErrorRate());
             fields.computeIfAbsent("errorsPerSecond", (String v) -> point.getErrorsPerSecond());
 
-            writer.writeMetricPoint(timestamp, transactionName, fields, tags);
+            writer.writeMetricPoint(timestamp, "element-timeseries", fields, tags);
 
         }
     }
