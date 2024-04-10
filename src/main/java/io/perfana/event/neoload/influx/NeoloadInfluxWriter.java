@@ -45,7 +45,7 @@ public class NeoloadInfluxWriter {
             fields.computeIfAbsent("userLoad", v -> point.getUserLoad());
             fields.computeIfAbsent("requestCountPerSecond", v -> point.getRequestCountPerSecond());
 
-            writer.writeMetricPoint(timestamp, "result-timeseries", fields, tags);
+            writer.writeMetricPoint(timestamp, "resultTimeseries", fields, tags);
         }
     }
 
@@ -71,7 +71,7 @@ public class NeoloadInfluxWriter {
             fields.computeIfAbsent("errorRate", v -> point.getErrorRate());
             fields.computeIfAbsent("errorsPerSecond", (String v) -> point.getErrorsPerSecond());
 
-            writer.writeMetricPoint(timestamp, "element-timeseries", fields, tags);
+            writer.writeMetricPoint(timestamp, "elementTimeseries", fields, tags);
 
         }
     }
