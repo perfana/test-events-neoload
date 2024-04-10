@@ -45,7 +45,7 @@ public class NeoloadInfluxWriter {
             fields.computeIfAbsent("userLoad", v -> point.getUserLoad());
             fields.computeIfAbsent("requestCountPerSecond", v -> point.getRequestCountPerSecond());
 
-            writer.writeMetricPoint(timestamp, "resultTimeSeries", fields, tags);
+            writer.writeMetricPoint(timestamp, "result-timeseries", fields, tags);
         }
     }
 
