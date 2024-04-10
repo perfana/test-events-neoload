@@ -29,6 +29,7 @@ import io.perfana.eventscheduler.api.message.EventMessageBus;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
@@ -44,12 +45,14 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
     private final AtomicReference<NeoloadInfluxWriter> influxWriter = new AtomicReference<>();
     private final AtomicReference<Instant> testStartTime = new AtomicReference<>();
 
-    private volatile String testExecutionId;
+    private final String testId;
     private volatile String workspaceId;
+    private volatile String testExecutionId;
     private volatile boolean testIsRunning = true;
 
     public NeoloadCloudEvent(NeoloadEventContext context, TestContext testContext, EventMessageBus messageBus, EventLogger logger) {
         super(context, testContext, messageBus, logger);
+        this.testId = eventContext.getNeoloadTestId();
     }
 
     @Override
@@ -67,7 +70,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
         influxWriter.set(new NeoloadInfluxWriter(writer));
 
         TestExecutionInput input = new TestExecutionInput();
-        input.setTestId(eventContext.getNeoloadTestId());
+        input.setTestId(testId);
         //input.setName(testContext.getProductName());
         //input.setDuration(Duration.ofMinutes(90).toString());
         input.setDescription("Run from test-events-neoload Perfana plugin");
@@ -81,7 +84,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
         EventMessage message = EventMessage.builder()
                 .pluginName(pluginName())
                 .variable(PERFANA_NEOLOAD_PREFIX + "testExecutionId", testExecutionId)
-                .variable(PERFANA_NEOLOAD_PREFIX + "testId", eventContext.getNeoloadTestId())
+                .variable(PERFANA_NEOLOAD_PREFIX + "testId", testId)
                 .variable(PERFANA_NEOLOAD_PREFIX + "workspaceId", workspaceId)
                 .build();
         eventMessageBus.send(message);
@@ -104,10 +107,11 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
 
     private Runnable createResultsFromNeoloadToInfluxThread() {
         return () -> {
+
             String nextRequestToken = null;
             Point lastPoint = null;
             Map<String, String> tags = Map.of(
-                    "application", testContext.getProductName(),
+                    "systemUnderTest", testContext.getSystemUnderTest(),
                     "testEnvironment", testContext.getTestEnvironment(),
                     "workload", testContext.getWorkload());
 
@@ -118,7 +122,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                     if (client.get() != null
                             && testExecutionId != null
                             && testStartTime.get() != null) {
-                        ResultTimeseries result = client.get().resultsTimeseries(testExecutionId, nextRequestToken);
+                        ResultTimeseries result = client.get().resultsTimeSeries(testExecutionId, nextRequestToken);
                         nextRequestToken = result.getNextRequestToken();
 
                         List<Point> points = result.getPoints();
@@ -139,10 +143,10 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                             }
                         }
                     } else {
-                        logger.info("No test execution id available, not fetching results to send to InfluxDB");
+                        logger.info("No data available yet, not fetching results to send to InfluxDB, will retry");
                     }
                 } catch (Exception e) {
-                    logger.warn("Failed to send data to InfluxDB:" + e.getMessage());
+                    logger.error("Failed to send data to InfluxDB", e);
                 }
                 try {
                     Thread.sleep(30_000);
@@ -162,73 +166,89 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
 
             boolean continuePolling = true;
             boolean testRunStarted = false;
+            boolean checkStartTime = false;
 
             while (continuePolling) {
 
                 // now start polling if load test is running, then send Go! message
                 try {
-                    GetTestExecutionResponse execution = client.get().getTestExecution(testExecutionId);
+                    if (!checkStartTime) {
+                        GetTestExecutionResponse execution = client.get().getTestExecution(testExecutionId);
 
-                    StepEnum step = execution.getStep();
+                        StepEnum step = execution.getStep();
 
-                    logger.info(String.format("Status for test execution id %s is now: %s",
-                            testExecutionId, step == null ? "<no status>" : step.name()));
-                    if (step == StepEnum.CANCELLED
-                            || step == StepEnum.FAILED
-                            || step == StepEnum.FAILED_TO_PREPARE_CONTROLLER
-                            || step == StepEnum.FAILED_TO_PREPARE_LGS) {
-                        continuePolling = false;
-                        testRunStarted = false;
+                        logger.info(String.format("Status for test execution id %s is now: %s",
+                                testExecutionId, step == null ? "<no status>" : step.name()));
+                        if (step == StepEnum.CANCELLED
+                                || step == StepEnum.FAILED
+                                || step == StepEnum.FAILED_TO_PREPARE_CONTROLLER
+                                || step == StepEnum.FAILED_TO_PREPARE_LGS) {
+                            continuePolling = false;
+                        }
+                        if (step == StepEnum.STARTED_TEST) {
+                            checkStartTime = true;
+                        }
+                    } else if (checkStartTime) {
+                        // find test results
+                        TestResultPage results = client.get().results(workspaceId, List.of(TestResult.StatusEnum.values()), List.of(testId));
+                        Optional<TestResult> testResultMaybe = results.getItems().stream().findFirst();
+                        if (testResultMaybe.isPresent()) {
+                            TestResult testResult = testResultMaybe.get();
+                            logger.info("Test result status: " + testResult.getStatus());
+                            if (testResult.getStatus() == TestResult.StatusEnum.RUNNING) {
+                                continuePolling = false;
+                                testRunStarted = true;
+                                testStartTime.set(testResult.getStartDate().toInstant());
+                            } else if (testResult.getStatus() == TestResult.StatusEnum.FAILED
+                                    || testResult.getStatus() == TestResult.StatusEnum.TERMINATED
+                                    || testResult.getStatus() == TestResult.StatusEnum.PASSED) {
+                                continuePolling = false;
+                            }
+                        } else {
+                            logger.warn("No test result available, will retry");
+                        }
                     }
-                    if (step == StepEnum.STARTED_TEST) {
+
+                    try {
+                        Thread.sleep(sleepInMillis);
+                    } catch (InterruptedException e) {
+                        logger.warn("Interrupt received, will stop polling now.");
                         continuePolling = false;
-                        testRunStarted = true;
-                        // TODO: is there a more precise start date to set?
-                        testStartTime.set(Instant.now());
+                        EventMessage stopMessage = EventMessage.builder()
+                                .pluginName(pluginName())
+                                .message("Stop!")
+                                .build();
+                        eventMessageBus.send(stopMessage);
+                        Thread.currentThread().interrupt();
+                    }
+
+                    if (System.currentTimeMillis() > maxPollingTimestamp) {
+                        logger.warn("Max polling period reached (" + eventContext.getPollingMaxDuration() + " seconds), will stop polling now.");
+                        continuePolling = false;
+                        EventMessage stopMessage = EventMessage.builder()
+                                .pluginName(pluginName())
+                                .message("Stop!")
+                                .build();
+                        eventMessageBus.send(stopMessage);
+                    } else {
+                        if (testRunStarted) {
+                            EventMessage goMessage = EventMessage.builder()
+                                    .pluginName(pluginName())
+                                    .message("Go!")
+                                    .build();
+                            eventMessageBus.send(goMessage);
+                        } else {
+                            EventMessage stopMessage = EventMessage.builder()
+                                    .pluginName(pluginName())
+                                    .message("Stop!")
+                                    .build();
+                            eventMessageBus.send(stopMessage);
+                        }
                     }
                 } catch (NeoloadClientException e) {
-                    logger.warn("Cannot call test runs active, will retry: " + e.getMessage());
-                }
-
-                try {
-                    Thread.sleep(sleepInMillis);
-                } catch (InterruptedException e) {
-                    logger.warn("Interrupt received, will stop polling now.");
-                    continuePolling = false;
-                    EventMessage stopMessage = EventMessage.builder()
-                        .pluginName(pluginName())
-                        .message("Stop!")
-                        .build();
-                    eventMessageBus.send(stopMessage);
-                    Thread.currentThread().interrupt();
-                }
-
-                if (System.currentTimeMillis() > maxPollingTimestamp) {
-                    logger.warn("Max polling period reached (" + eventContext.getPollingMaxDuration() + " seconds), will stop polling now.");
-                    continuePolling = false;
-                    EventMessage stopMessage = EventMessage.builder()
-                        .pluginName(pluginName())
-                        .message("Stop!")
-                        .build();
-                    eventMessageBus.send(stopMessage);
+                    logger.warn("Cannot check test result, will retry: " + e.getMessage());
                 }
             }
-
-            if (testRunStarted) {
-                EventMessage goMessage = EventMessage.builder()
-                        .pluginName(pluginName())
-                        .message("Go!")
-                        .build();
-                eventMessageBus.send(goMessage);
-            }
-            else {
-                EventMessage stopMessage = EventMessage.builder()
-                        .pluginName(pluginName())
-                        .message("Stop!")
-                        .build();
-                eventMessageBus.send(stopMessage);
-            }
-
         };
     }
 

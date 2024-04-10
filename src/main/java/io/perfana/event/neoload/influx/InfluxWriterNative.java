@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023 Peter Paul Bakker - Perfana
+ * Copyright (C) 2024 Peter Paul Bakker, Perfana
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,8 +19,10 @@ import io.perfana.eventscheduler.api.EventLogger;
 import jakarta.validation.constraints.NotNull;
 
 import java.io.IOException;
+import java.net.PasswordAuthentication;
 import java.net.URI;
 import java.net.URLEncoder;
+import java.net.Authenticator;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -36,7 +38,6 @@ public class InfluxWriterNative implements InfluxWriter {
     private final EventLogger log;
 
     private final HttpClient httpClient;
-    private final InfluxWriterConfig config;
 
     private final List<String> metricsBuffer = new ArrayList<>();
 
@@ -53,17 +54,32 @@ public class InfluxWriterNative implements InfluxWriter {
 
         this.log = logger;
 
-        this.httpClient = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_2)
-                .connectTimeout(Duration.ofSeconds(3))
-                .build();
-
-        this.config = config;
+        this.httpClient = createHttpClient(config);
 
         Map<String, String> requestParams = initializeRequestParams(config);
         this.writeUri = createWriteUri(requestParams, config.getUrl());
 
     }
+
+    private static HttpClient createHttpClient(InfluxWriterConfig config) {
+        HttpClient.Builder builder = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_2)
+                .connectTimeout(Duration.ofSeconds(3));
+
+        if ((config.getUsername() != null && !config.getUsername().isBlank())
+                && (config.getPassword() != null && !config.getPassword().isBlank())) {
+            builder.authenticator(new Authenticator() {
+                @Override
+                protected PasswordAuthentication getPasswordAuthentication() {
+                    return new PasswordAuthentication(config.getUsername(), config.getPassword().toCharArray());
+                }
+            });
+        }
+
+        HttpClient client = builder.build();
+        return client;
+    }
+
     @Override
     public boolean isHealthy() {
         // TODO: implement health check
@@ -152,7 +168,7 @@ public class InfluxWriterNative implements InfluxWriter {
                 .uri(writeUri)
                 .timeout(Duration.ofMinutes(2))
                 .header("Content-Type", "application/x-www-form-urlencoded")
-                .header("User-agent", "jfr-exporter/1.0")
+                .header("User-agent", "test-events-neoload/1.0")
                 .POST(HttpRequest.BodyPublishers.ofString(data))
                 .build();
 

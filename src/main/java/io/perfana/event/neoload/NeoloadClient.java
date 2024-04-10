@@ -252,14 +252,14 @@ public class NeoloadClient {
      * @param nextRequestToken is null for first call, get from ResultTimeseries for subsequent calls.
      * @return results based on PT10M timewindow, use nextRequestToken to fetch next data.
      */
-    public ResultTimeseries resultsTimeseries(String testId, String nextRequestToken) {
-        return resultsTimeseries(testId, ALL_TIME_SERIES, nextRequestToken);
+    public ResultTimeseries resultsTimeSeries(String testId, String nextRequestToken) {
+        return resultsTimeSeries(testId, ALL_TIME_SERIES, nextRequestToken);
     }
 
     /**
      * Start scraping live data.
      */
-    public ResultTimeseries resultsTimeseries(String testId, List<String> series, String nextRequestToken) {
+    public ResultTimeseries resultsTimeSeries(String testId, List<String> series, String nextRequestToken) {
         notEmpty(testId, "testId");
 
         String uri = String.format("%s/results/%s/timeseries", baseUrl, testId);
@@ -307,7 +307,7 @@ public class NeoloadClient {
         }
     }
 
-    public TestResultPage results(String workspaceId) {
+    public TestResultPage results(String workspaceId, List<TestResult.StatusEnum> status, List<String> testIds) {
         notEmpty(workspaceId, "workspaceId");
 
         String uri = String.format("%s/results", baseUrl);
@@ -315,7 +315,12 @@ public class NeoloadClient {
         try {
             URIBuilder uriBuilder = new URIBuilder(uri);
             uriBuilder.setParameter("workspaceId", workspaceId);
-            uriBuilder.addParameter("status", "PASSED");
+            for (String testId : testIds) {
+                uriBuilder.addParameter("testId", testId);
+            }
+            for (TestResult.StatusEnum s : status) {
+                uriBuilder.addParameter("status", s.getValue());
+            }
             uriBuilder.addParameter("pageNumber", "0");
             uriBuilder.addParameter("pageSize", "25");
             uriBuilder.addParameter("sort", "-startDate");

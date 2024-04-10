@@ -114,7 +114,7 @@ class NeoloadClientLiveTest {
 
         String nextRequestToken = null;
         while (true) {
-            ResultTimeseries result = client.resultsTimeseries(testId, nextRequestToken);
+            ResultTimeseries result = client.resultsTimeSeries(testId, nextRequestToken);
             assertNotNull(result);
 
             nextRequestToken = result.getNextRequestToken();
@@ -146,7 +146,7 @@ class NeoloadClientLiveTest {
 
         String workspaceId = System.getenv("NEOLOAD_WORKSPACE_ID");
 
-        TestResultPage result = client.results(workspaceId);
+        TestResultPage result = client.results(workspaceId, Collections.emptyList(), Collections.emptyList());
 
         List<TestResult> items = result.getItems();
         for (TestResult item : items) {
@@ -221,7 +221,7 @@ class NeoloadClientLiveTest {
 
         String testId = "80a0e387-13b6-4b46-9bf5-162c58216eed";
 
-        ResultTimeseries result = client.resultsTimeseries(testId, null);
+        ResultTimeseries result = client.resultsTimeSeries(testId, null);
         System.out.println(result);
 
         String influxDbUrl = "http://localhost:8086";

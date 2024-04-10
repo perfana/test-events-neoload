@@ -110,7 +110,13 @@ public class TestResult {
     
     TERMINATED("TERMINATED"),
     
-    UNKNOWN("UNKNOWN");
+    UNKNOWN("UNKNOWN"),
+
+    PASSED("PASSED"),
+
+    FAILED("FAILED"),
+
+    COMPUTING("COMPUTING");
 
     private String value;
 
