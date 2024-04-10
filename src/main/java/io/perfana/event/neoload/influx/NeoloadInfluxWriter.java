@@ -15,11 +15,13 @@
  */
 package io.perfana.event.neoload.influx;
 
+import io.perfana.event.neoload.model.ElementPoint;
 import io.perfana.event.neoload.model.Point;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -43,10 +45,56 @@ public class NeoloadInfluxWriter {
             Long requestErrors = point.getRequestErrors();
             Long userLoad = point.getUserLoad();
 
-            writeToInflux(timestamp, "requestAvgDuration", "durationMs", String.valueOf(requestAvgDuration), tags);
-            writeToInflux(timestamp, "requestCountPerSecond", "rate", String.valueOf(requestCountPerSecond), tags);
-            writeToInflux(timestamp, "requestErrors", "count", String.valueOf(requestErrors), tags);
-            writeToInflux(timestamp, "userLoad", "count", String.valueOf(userLoad), tags);
+            writeToInfluxIfNotNull(timestamp, "requestAvgDuration", "durationMs", requestAvgDuration, tags);
+            writeToInfluxIfNotNull(timestamp, "requestCountPerSecond", "rate", requestCountPerSecond, tags);
+            writeToInfluxIfNotNull(timestamp, "requestErrors", "count", requestErrors, tags);
+            writeToInfluxIfNotNull(timestamp, "userLoad", "count", userLoad, tags);
+        }
+    }
+
+    public void uploadElementPointsTimeSeriesToInfluxDB(
+            String transactionName,
+            List<ElementPoint> points,
+            Instant startTime,
+            Map<String, String> tags) {
+
+        Map<String, String> extendedTags = new HashMap<>(tags);
+        extendedTags.put("transaction", transactionName);
+
+        for (ElementPoint point : points) {
+            Instant timestamp = startTime.plus(Duration.parse(point.getOffset()));
+
+            Double avgDuration = point.getAvgDuration();
+            Double minDuration = point.getMinDuration();
+            Double maxDuration = point.getMaxDuration();
+            Double avgTtfb = point.getAvgTtfb();
+            Double minTtfb = point.getMinTtfb();
+            Double maxTtfb = point.getMaxTtfb();
+            Long count = point.getCount();
+            Double throughput = point.getThroughput();
+            Double elementsPerSecond = point.getElementsPerSecond();
+            Long errors = point.getErrors();
+            Double errorRate = point.getErrorRate();
+            Double errorsPerSecond = point.getErrorsPerSecond();
+
+            writeToInfluxIfNotNull(timestamp, "avgDuration", "durationMs", avgDuration, extendedTags);
+            writeToInfluxIfNotNull(timestamp, "minDuration", "durationMs", minDuration, extendedTags);
+            writeToInfluxIfNotNull(timestamp, "maxDuration", "durationMs", maxDuration, extendedTags);
+            writeToInfluxIfNotNull(timestamp, "avgTtfb", "durationMs", avgTtfb, extendedTags);
+            writeToInfluxIfNotNull(timestamp, "minTtfb", "durationMs", minTtfb, extendedTags);
+            writeToInfluxIfNotNull(timestamp, "maxTtfb", "durationMs", maxTtfb, extendedTags);
+            writeToInfluxIfNotNull(timestamp, "count", "count", count, extendedTags);
+            writeToInfluxIfNotNull(timestamp, "throughput", "bytesPerSecond", throughput, extendedTags);
+            writeToInfluxIfNotNull(timestamp, "elementsPerSecond", "rate", elementsPerSecond, extendedTags);
+            writeToInfluxIfNotNull(timestamp, "errors", "count", errors, extendedTags);
+            writeToInfluxIfNotNull(timestamp, "errorRate", "percentage", errorRate, extendedTags);
+            writeToInfluxIfNotNull(timestamp, "errorsPerSecond", "rate", errorsPerSecond, extendedTags);
+        }
+    }
+
+    private void writeToInfluxIfNotNull(Instant timestamp, String key, String field, Number value, Map<String, String> extendedTags) {
+        if (value != null) {
+            writeToInflux(timestamp, key, field, String.valueOf(value), extendedTags);
         }
     }
 

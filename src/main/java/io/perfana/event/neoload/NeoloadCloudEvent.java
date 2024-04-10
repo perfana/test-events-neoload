@@ -27,12 +27,14 @@ import io.perfana.eventscheduler.api.message.EventMessage;
 import io.perfana.eventscheduler.api.message.EventMessageBus;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
 
@@ -48,6 +50,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
     private final String testId;
     private volatile String workspaceId;
     private volatile String testExecutionId;
+    private volatile String testResultId;
     private volatile boolean testIsRunning = true;
 
     public NeoloadCloudEvent(NeoloadEventContext context, TestContext testContext, EventMessageBus messageBus, EventLogger logger) {
@@ -93,7 +96,6 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                 workspaceId, testExecutionId, Instant.now(), this.testExecutionId));
 
         Runnable pollForTestRunning = createPollForTestRunningThread();
-
         Executor executor1 = Executors.newSingleThreadExecutor(r -> new Thread(r, "NeoloadPollForTestRunning"));
         executor1.execute(pollForTestRunning);
 
@@ -101,8 +103,88 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
         Executor executor2 = Executors.newSingleThreadExecutor(r -> new Thread(r, "ResultsFromNeoloadToInflux"));
         executor2.execute(resultsFromNeoloadToInflux);
 
+        Runnable seriesFromNeoloadToInflux = createResultSeriesFromNeoloadToInfluxThread();
+        Executor executor3 = Executors.newSingleThreadExecutor(r -> new Thread(r, "SeriesFromNeoloadToInflux"));
+        executor3.execute(seriesFromNeoloadToInflux);
+
         logger.info(String.format("started run at %s with test execution id: %s. Waiting for status TEST_STARTED.",
             Instant.now(), testExecution.getId()));
+    }
+
+    private Runnable createResultSeriesFromNeoloadToInfluxThread() {
+        return () -> {
+
+            Map<String, ElementPoint> elementIdToLastPoint = new HashMap<>();
+            Map<String, String> elementIdToNextRequestToken = new HashMap<>();
+            Map<String, String> tags = Map.of(
+                    "systemUnderTest", testContext.getSystemUnderTest(),
+                    "testEnvironment", testContext.getTestEnvironment(),
+                    "workload", testContext.getWorkload());
+
+            logger.info("Start thread to send series to Influx");
+
+            while (testIsRunning) {
+                try {
+                    if (client.get() != null
+                            && testExecutionId != null
+                            && testStartTime.get() != null) {
+
+                        GetResultElementValuesResponse response = client.get().getResultElementsValues(testResultId);
+
+                        List<ResultElementValue> items = response.getItems();
+
+                        Map<String, String> nameToIds = items.stream()
+                                .collect(Collectors.toMap(ResultElementValue::getName, ResultElementValue::getId));
+
+                        for (Map.Entry<String, String> entry : nameToIds.entrySet()) {
+                            String name = entry.getKey();
+                            String elementId = entry.getValue();
+
+                            // TODO: enable next request token!
+                            ElementTimeSeries timeSeries = client.get().getResultElementTimeSeries(testResultId, elementId);
+                            if (logger.isDebugEnabled()) {
+                                logger.debug("Name: " + name);
+                                logger.debug("Timeseries: " + timeSeries);
+                            }
+
+                            List<ElementPoint> points = timeSeries.getPoints();
+
+                            elementIdToNextRequestToken.put(elementId, timeSeries.getNextRequestToken());
+
+                            if (!points.isEmpty()) {
+                                // not the first
+                                ElementPoint previousLastPoint = elementIdToLastPoint.get(elementId);
+                                if (previousLastPoint != null) {
+                                    int lastPointIndex = points.lastIndexOf(previousLastPoint);
+                                    points = points.subList(lastPointIndex, points.size() - 1);
+                                }
+                                if (!points.isEmpty()) {
+                                    previousLastPoint = points.get(points.size() - 1);
+                                    elementIdToLastPoint.put(elementId, previousLastPoint);
+                                    logger.info("Sending " + points.size() + " points to InfluxDB for element: " + name);
+                                    influxWriter.get().uploadElementPointsTimeSeriesToInfluxDB(
+                                            name,
+                                            points,
+                                            testStartTime.get(),
+                                            tags);
+                                }
+                            }
+                        }
+                    } else {
+                        logger.info("No data available yet, not fetching results to send to InfluxDB, will retry");
+                    }
+                } catch (Exception e) {
+                    logger.error("Failed to send data to InfluxDB", e);
+                }
+
+                try {
+                    Thread.sleep(30_000);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+            logger.info("End thread to send results to Influx");
+        };
     }
 
     private Runnable createResultsFromNeoloadToInfluxThread() {
@@ -196,6 +278,8 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                             TestResult testResult = testResultMaybe.get();
                             logger.info("Test result status: " + testResult.getStatus());
                             if (testResult.getStatus() == TestResult.StatusEnum.RUNNING) {
+                                // used to get series in other thread
+                                testResultId = testResult.getId();
                                 continuePolling = false;
                                 testRunStarted = true;
                                 testStartTime.set(testResult.getStartDate().toInstant());

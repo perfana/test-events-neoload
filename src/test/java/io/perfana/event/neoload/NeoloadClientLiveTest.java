@@ -140,7 +140,7 @@ class NeoloadClientLiveTest {
     }
 
     @Test
-    //@Disabled("only works with real influxdb to connect to")
+    @Disabled("only works with real influxdb to connect to")
     void testResults() {
         NeoloadClient client = createRealNeoloadClient();
 
@@ -157,7 +157,7 @@ class NeoloadClientLiveTest {
     }
 
     @Test
-    //@Disabled("only works with real influxdb to connect to")
+    @Disabled("only works with real influxdb to connect to")
     void getResultElementValues() {
         NeoloadClient client = createRealNeoloadClient();
 
@@ -174,7 +174,7 @@ class NeoloadClientLiveTest {
     }
 
     @Test
-        //@Disabled("only works with real influxdb to connect to")
+    @Disabled("only works with real influxdb to connect to")
     void getResultElementTimeSeriesAll() {
         NeoloadClient client = createRealNeoloadClient();
 
@@ -201,7 +201,7 @@ class NeoloadClientLiveTest {
     }
 
     @Test
-        //@Disabled("only works with real influxdb to connect to")
+    @Disabled("only works with real influxdb to connect to")
     void getResultElementTimeSeries() {
         NeoloadClient client = createRealNeoloadClient();
 
