@@ -15,24 +15,19 @@
  */
 package io.perfana.event.neoload.influx;
 
-import io.perfana.event.neoload.NeoloadClient;
 import io.perfana.event.neoload.model.Point;
-import io.perfana.event.neoload.model.ResultTimeseries;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
-import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-import java.util.Collections;
-import java.util.concurrent.atomic.AtomicInteger;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import java.time.Instant;
+import java.util.Collections;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 class NeoloadInfluxWriterTest {
 
     @Test
-    void testUploadTimeSeriesToInfluxDB() {
+    void testUploadResultsTimeSeriesToInfluxDB() {
 
         AtomicInteger counter = new AtomicInteger();
 
@@ -43,19 +38,13 @@ class NeoloadInfluxWriterTest {
             }
 
             @Override
-            public void writeMetricPoint(Instant timestamp, String key, String field, String fieldValue, Map<String, String> inputTags, Map<String, Object> extraFields) {
+            public void writeMetricPoint(Instant timestamp, String key, Map<String, Number> inputFields, Map<String, String> inputTags) {
                 if (counter.incrementAndGet() == 1) {
                     Assertions.assertEquals(Instant.parse("2024-01-01T00:00:01.0Z"), timestamp);
-                    Assertions.assertEquals("requestAvgDuration", key);
-                    Assertions.assertEquals("durationMs", field);
-                    Assertions.assertEquals("1.0", fieldValue);
+                    Assertions.assertEquals("resultTimeSeries", key);
                     Assertions.assertEquals(Collections.singletonMap("application", "test"), inputTags);
-                    Assertions.assertEquals(Collections.emptyMap(), extraFields);
+                    Assertions.assertEquals(Double.valueOf("1.0"), inputFields.get("requestAvgDuration"));
                 }
-            }
-
-            public long toEpochNs(Instant timestamp) {
-                return timestamp.toEpochMilli() * 1000000;
             }
 
             @Override
@@ -69,8 +58,7 @@ class NeoloadInfluxWriterTest {
         point.setOffset("PT1S");
         point.setRequestAvgDuration(1.0);
 
-
-        neoloadInfluxWriter.uploadTimeSeriesToInfluxDB(Collections.singletonList(point), Instant.parse("2024-01-01T00:00:00.00Z"), Collections.singletonMap("application", "test"));
+        neoloadInfluxWriter.uploadResultsTimeSeriesToInfluxDB(Collections.singletonList(point), Instant.parse("2024-01-01T00:00:00.00Z"), Collections.singletonMap("application", "test"));
     }
 
 }

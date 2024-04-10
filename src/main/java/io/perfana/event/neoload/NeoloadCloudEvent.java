@@ -218,7 +218,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                             if (!points.isEmpty()) {
                                 lastPoint = points.get(points.size() - 1);
                                 logger.info("Sending " + points.size() + " points to InfluxDB");
-                                influxWriter.get().uploadTimeSeriesToInfluxDB(
+                                influxWriter.get().uploadResultsTimeSeriesToInfluxDB(
                                         points,
                                         testStartTime.get(),
                                         tags);

@@ -232,7 +232,7 @@ class NeoloadClientLiveTest {
         try (InfluxWriterNative influxWriter = new InfluxWriterNative(config, EventLoggerStdOut.INSTANCE_DEBUG)) {
             NeoloadInfluxWriter neoloadWriter = new NeoloadInfluxWriter(influxWriter);
             Map<String, String> tags = Collections.singletonMap("application", "Afterburner");
-            neoloadWriter.uploadTimeSeriesToInfluxDB(result.getPoints(), Instant.now(), tags);
+            neoloadWriter.uploadResultsTimeSeriesToInfluxDB(result.getPoints(), Instant.now(), tags);
         }
 
         assertFalse(result.getPoints().isEmpty());

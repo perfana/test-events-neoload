@@ -20,7 +20,6 @@ import io.perfana.event.neoload.model.Point;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +31,7 @@ public class NeoloadInfluxWriter {
         this.writer = writer;
     }
 
-    public void uploadTimeSeriesToInfluxDB(
+    public void uploadResultsTimeSeriesToInfluxDB(
             List<Point> points,
             Instant startTime,
             Map<String, String> tags) {
@@ -40,15 +39,13 @@ public class NeoloadInfluxWriter {
         for (Point point : points) {
             Instant timestamp = startTime.plus(Duration.parse(point.getOffset()));
 
-            Double requestAvgDuration = point.getRequestAvgDuration();
-            Double requestCountPerSecond = point.getRequestCountPerSecond();
-            Long requestErrors = point.getRequestErrors();
-            Long userLoad = point.getUserLoad();
+            Map<String, Number> fields = new HashMap<>();
+            fields.computeIfAbsent("requestAvgDuration", v -> point.getRequestAvgDuration());
+            fields.computeIfAbsent("requestErrors", v -> point.getRequestErrors());
+            fields.computeIfAbsent("userLoad", v -> point.getUserLoad());
+            fields.computeIfAbsent("requestCountPerSecond", v -> point.getRequestCountPerSecond());
 
-            writeToInfluxIfNotNull(timestamp, "requestAvgDuration", "durationMs", requestAvgDuration, tags);
-            writeToInfluxIfNotNull(timestamp, "requestCountPerSecond", "rate", requestCountPerSecond, tags);
-            writeToInfluxIfNotNull(timestamp, "requestErrors", "count", requestErrors, tags);
-            writeToInfluxIfNotNull(timestamp, "userLoad", "count", userLoad, tags);
+            writer.writeMetricPoint(timestamp, "resultTimeSeries", fields, tags);
         }
     }
 
@@ -58,52 +55,25 @@ public class NeoloadInfluxWriter {
             Instant startTime,
             Map<String, String> tags) {
 
-        Map<String, String> extendedTags = new HashMap<>(tags);
-        extendedTags.put("transaction", transactionName);
-
         for (ElementPoint point : points) {
             Instant timestamp = startTime.plus(Duration.parse(point.getOffset()));
 
-            Double avgDuration = point.getAvgDuration();
-            Double minDuration = point.getMinDuration();
-            Double maxDuration = point.getMaxDuration();
-            Double avgTtfb = point.getAvgTtfb();
-            Double minTtfb = point.getMinTtfb();
-            Double maxTtfb = point.getMaxTtfb();
-            Long count = point.getCount();
-            Double throughput = point.getThroughput();
-            Double elementsPerSecond = point.getElementsPerSecond();
-            Long errors = point.getErrors();
-            Double errorRate = point.getErrorRate();
-            Double errorsPerSecond = point.getErrorsPerSecond();
+            Map<String, Number> fields = new HashMap<>();
+            fields.computeIfAbsent("avgDuration", v -> point.getAvgDuration());
+            fields.computeIfAbsent("minDuration", v -> point.getMinDuration());
+            fields.computeIfAbsent("maxDuration", v -> point.getMaxDuration());
+            fields.computeIfAbsent("avgTtfb", v -> point.getAvgTtfb());
+            fields.computeIfAbsent("minTtfb", v -> point.getMinTtfb());
+            fields.computeIfAbsent("maxTtfb", v -> point.getMaxTtfb());
+            fields.computeIfAbsent("count", v -> point.getCount());
+            fields.computeIfAbsent("throughput", v -> point.getThroughput());
+            fields.computeIfAbsent("elementsPerSecond", v -> point.getElementsPerSecond());
+            fields.computeIfAbsent("errors", v -> point.getErrors());
+            fields.computeIfAbsent("errorRate", v -> point.getErrorRate());
+            fields.computeIfAbsent("errorsPerSecond", (String v) -> point.getErrorsPerSecond());
 
-            writeToInfluxIfNotNull(timestamp, "avgDuration", "durationMs", avgDuration, extendedTags);
-            writeToInfluxIfNotNull(timestamp, "minDuration", "durationMs", minDuration, extendedTags);
-            writeToInfluxIfNotNull(timestamp, "maxDuration", "durationMs", maxDuration, extendedTags);
-            writeToInfluxIfNotNull(timestamp, "avgTtfb", "durationMs", avgTtfb, extendedTags);
-            writeToInfluxIfNotNull(timestamp, "minTtfb", "durationMs", minTtfb, extendedTags);
-            writeToInfluxIfNotNull(timestamp, "maxTtfb", "durationMs", maxTtfb, extendedTags);
-            writeToInfluxIfNotNull(timestamp, "count", "count", count, extendedTags);
-            writeToInfluxIfNotNull(timestamp, "throughput", "bytesPerSecond", throughput, extendedTags);
-            writeToInfluxIfNotNull(timestamp, "elementsPerSecond", "rate", elementsPerSecond, extendedTags);
-            writeToInfluxIfNotNull(timestamp, "errors", "count", errors, extendedTags);
-            writeToInfluxIfNotNull(timestamp, "errorRate", "percentage", errorRate, extendedTags);
-            writeToInfluxIfNotNull(timestamp, "errorsPerSecond", "rate", errorsPerSecond, extendedTags);
+            writer.writeMetricPoint(timestamp, transactionName, fields, tags);
+
         }
-    }
-
-    private void writeToInfluxIfNotNull(Instant timestamp, String key, String field, Number value, Map<String, String> extendedTags) {
-        if (value != null) {
-            writeToInflux(timestamp, key, field, String.valueOf(value), extendedTags);
-        }
-    }
-
-    private void writeToInflux(Instant timestamp, String key, String field, String fieldValue, Map<String, String> tags) {
-        writer.writeMetricPoint(timestamp,
-                key,
-                field,
-                fieldValue,
-                tags,
-                Collections.emptyMap());
     }
 }
