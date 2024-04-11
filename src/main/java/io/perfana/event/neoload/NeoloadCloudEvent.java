@@ -134,12 +134,15 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
 
                         List<ResultElementValue> items = response.getItems();
 
-                        Map<String, String> nameToIds = items.stream()
-                                .collect(Collectors.toMap(ResultElementValue::getName, ResultElementValue::getId));
+                        Map<String, String> idsToName = items.stream()
+                                .collect(Collectors.toMap(ResultElementValue::getId, ResultElementValue::getName));
 
-                        for (Map.Entry<String, String> entry : nameToIds.entrySet()) {
-                            String name = entry.getKey();
-                            String elementId = entry.getValue();
+                        Map<String, String> idToUserPath = items.stream()
+                                .collect(Collectors.toMap(ResultElementValue::getId, ResultElementValue::getUserPath));
+
+                        for (Map.Entry<String, String> entry : idsToName.entrySet()) {
+                            String elementId = entry.getKey();
+                            String name = entry.getValue();
 
                             // TODO: enable next request token!
                             ElementTimeSeries timeSeries = client.get().getResultElementTimeSeries(testResultId, elementId);
@@ -165,6 +168,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                                     logger.info("Sending " + points.size() + " points to InfluxDB for element: " + name);
 
                                     tags.put("name", name);
+                                    tags.put("userPath", idToUserPath.get(elementId));
 
                                     influxWriter.get().uploadElementPointsTimeSeriesToInfluxDB(
                                             points,
