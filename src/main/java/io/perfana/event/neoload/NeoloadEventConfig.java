@@ -34,6 +34,10 @@ public class NeoloadEventConfig extends EventConfig {
     private boolean useProxy = false;
     private int proxyPort = 8888;
 
+    public NeoloadEventConfig() {
+        // default make it wait for test running before starting test
+        setReadyForStartParticipant(true);
+    }
     public void setNeoloadAccountToken(String neoloadAccountToken) {
         this.neoloadAccountToken = neoloadAccountToken;
     }

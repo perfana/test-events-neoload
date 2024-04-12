@@ -92,8 +92,8 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                 .build();
         eventMessageBus.send(message);
 
-        logger.info(String.format("started polling if running for workspaceId: %s testId: %s at %s with testExecutionId: %s",
-                workspaceId, testExecutionId, Instant.now(), this.testExecutionId));
+        logger.info(String.format("started polling at %s if running for workspaceId: %s testId: %s testExecutionId: %s",
+                Instant.now(), workspaceId, testId, testExecutionId));
 
         Runnable pollForTestRunning = createPollForTestRunningThread();
         Executor executor1 = Executors.newSingleThreadExecutor(r -> new Thread(r, "NeoloadPollForTestRunning"));
@@ -107,8 +107,8 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
         Executor executor3 = Executors.newSingleThreadExecutor(r -> new Thread(r, "SeriesFromNeoloadToInflux"));
         executor3.execute(seriesFromNeoloadToInflux);
 
-        logger.info(String.format("started run at %s with test execution id: %s. Waiting for status TEST_STARTED.",
-            Instant.now(), testExecution.getId()));
+        logger.info(String.format("before test finished at %s with test execution id: %s. Now waiting for test status RUNNING.",
+            Instant.now(), testExecutionId));
     }
 
     private Runnable createResultSeriesFromNeoloadToInfluxThread() {
@@ -366,7 +366,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
         if (client.get() != null) {
             client.get().cancelTestExecution(testExecutionId);
         } else {
-            logger.warn("Cannot call stop run, LoadRunnerCloudClient is null");
+            logger.warn("Cannot call stop run, NeoloadClient is null");
         }
     }
 
