@@ -287,6 +287,13 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                             if (testResult.getStatus() == TestResult.StatusEnum.RUNNING) {
                                 // used to get series in other thread
                                 testResultId = testResult.getId();
+
+                                EventMessage message = EventMessage.builder()
+                                        .pluginName(pluginName())
+                                        .variable(PERFANA_NEOLOAD_PREFIX + "testResultId", testResultId)
+                                        .build();
+                                eventMessageBus.send(message);
+
                                 continuePolling = false;
                                 testRunStarted = true;
                                 testStartTime.set(testResult.getStartDate().toInstant());
