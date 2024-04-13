@@ -26,6 +26,7 @@ import io.perfana.eventscheduler.api.config.TestContext;
 import io.perfana.eventscheduler.api.message.EventMessage;
 import io.perfana.eventscheduler.api.message.EventMessageBus;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
@@ -47,6 +48,8 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
     private final AtomicReference<NeoloadInfluxWriter> influxWriter = new AtomicReference<>();
     private final AtomicReference<Instant> testStartTime = new AtomicReference<>();
 
+    private final Duration sendInfluxDataDelay;
+
     private final String testId;
     private volatile String workspaceId;
     private volatile String testExecutionId;
@@ -56,6 +59,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
     public NeoloadCloudEvent(NeoloadEventContext context, TestContext testContext, EventMessageBus messageBus, EventLogger logger) {
         super(context, testContext, messageBus, logger);
         this.testId = eventContext.getNeoloadTestId();
+        this.sendInfluxDataDelay = eventContext.getSendInfluxDataDelay();
     }
 
     @Override
@@ -134,13 +138,15 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
 
                         List<ResultElementValue> items = response.getItems();
 
-                        Map<String, String> idsToName = items.stream()
+                        Map<String, String> idToName = items.stream()
                                 .collect(Collectors.toMap(ResultElementValue::getId, ResultElementValue::getName));
 
                         Map<String, String> idToUserPath = items.stream()
                                 .collect(Collectors.toMap(ResultElementValue::getId, ResultElementValue::getUserPath));
 
-                        for (Map.Entry<String, String> entry : idsToName.entrySet()) {
+                        sendPercentilesToInflux(items, idToName, idToUserPath, tags);
+
+                        for (Map.Entry<String, String> entry : idToName.entrySet()) {
                             String elementId = entry.getKey();
                             String name = entry.getValue();
 
@@ -167,6 +173,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                                     elementIdToLastPoint.put(elementId, previousLastPoint);
                                     logger.info("Sending " + points.size() + " points to InfluxDB for element: " + name);
 
+                                    // expected to replace values for each loop
                                     tags.put("name", name);
                                     tags.put("userPath", idToUserPath.get(elementId));
 
@@ -185,7 +192,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                 }
 
                 try {
-                    Thread.sleep(30_000);
+                    Thread.sleep(sendInfluxDataDelay.toMillis());
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
@@ -193,6 +200,29 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
             logger.info("End thread to send results to Influx");
         };
     }
+
+    private void sendPercentilesToInflux(List<ResultElementValue> items, Map<String, String> idToName, Map<String, String> idToUserPath, Map<String, String> tags) {
+        logger.info("Sending " + items.size() + " percentiles to Influx");
+
+        for (ResultElementValue item : items) {
+
+            Map<String, Number> percentiles = new HashMap<>();
+            percentiles.put("perc50", item.getPerc50().doubleValue());
+            percentiles.put("perc90", item.getPerc90().doubleValue());
+            percentiles.put("perc95", item.getPerc95().doubleValue());
+            percentiles.put("perc99", item.getPerc99().doubleValue());
+
+            Map<String, String> extendedTags = new HashMap<>(tags);
+            extendedTags.put("name", idToName.get(item.getId()));
+            extendedTags.put("userPath", idToUserPath.get(item.getId()));
+
+            influxWriter.get().uploadPercentilesToInfluxDB(
+                    percentiles,
+                    Instant.now(),
+                    extendedTags);
+        }
+    }
+
 
     private Runnable createResultsFromNeoloadToInfluxThread() {
         return () -> {
@@ -238,7 +268,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                     logger.error("Failed to send data to InfluxDB", e);
                 }
                 try {
-                    Thread.sleep(30_000);
+                    Thread.sleep(sendInfluxDataDelay.toMillis());
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }

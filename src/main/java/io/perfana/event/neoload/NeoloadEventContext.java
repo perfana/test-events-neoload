@@ -25,6 +25,7 @@ public class NeoloadEventContext extends EventContext {
     private final String neoloadTestId;
     private final Duration pollingPeriod;
     private final Duration pollingMaxDuration;
+    private final Duration sendInfluxDataDelay;
     private final InfluxWriterConfig influxWriterConfig;
     private final boolean useProxy;
     private final int proxyPort;
@@ -35,6 +36,7 @@ public class NeoloadEventContext extends EventContext {
         String neoloadTestId,
         Duration pollingPeriod,
         Duration pollingMaxDuration,
+        Duration sendInfluxDataDelay,
         InfluxWriterConfig influxWriterConfig,
         boolean useProxy,
         int proxyPort) {
@@ -44,6 +46,7 @@ public class NeoloadEventContext extends EventContext {
             this.pollingPeriod = pollingPeriod;
             this.pollingMaxDuration = pollingMaxDuration;
             this.influxWriterConfig = influxWriterConfig;
+            this.sendInfluxDataDelay = sendInfluxDataDelay;
             this.useProxy = useProxy;
             this.proxyPort = proxyPort;
     }
@@ -76,4 +79,7 @@ public class NeoloadEventContext extends EventContext {
         return influxWriterConfig;
     }
 
+    public Duration getSendInfluxDataDelay() {
+        return sendInfluxDataDelay;
+    }
 }

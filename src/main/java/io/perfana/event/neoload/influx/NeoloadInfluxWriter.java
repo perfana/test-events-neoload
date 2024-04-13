@@ -75,4 +75,13 @@ public class NeoloadInfluxWriter {
 
         }
     }
+
+    public void uploadPercentilesToInfluxDB(
+            Map<String, Number> percentiles,
+            Instant timestamp,
+            Map<String, String> tags) {
+
+        writer.writeMetricPoint(timestamp, "percentiles", percentiles, tags);
+
+    }
 }
