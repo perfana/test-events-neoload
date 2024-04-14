@@ -118,9 +118,9 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
     private Runnable createResultSeriesFromNeoloadToInfluxThread() {
         return () -> {
 
-            Map<String, ElementPoint> elementIdToLastPoint = new HashMap<>();
-            Map<String, String> elementIdToNextRequestToken = new HashMap<>();
+            //Map<String, String> elementIdToNextRequestToken = new HashMap<>();
 
+            String nextRequestToken = null;
             Map<String, String> tags = new HashMap<>();
             tags.put("systemUnderTest", testContext.getSystemUnderTest());
             tags.put("testEnvironment", testContext.getTestEnvironment());
@@ -150,8 +150,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                             String elementId = entry.getKey();
                             String name = entry.getValue();
 
-                            // TODO: enable next request token!
-                            ElementTimeSeries timeSeries = client.get().getResultElementTimeSeries(testResultId, elementId);
+                            ElementTimeSeries timeSeries = client.get().getResultElementTimeSeries(testResultId, elementId, nextRequestToken);
                             if (logger.isDebugEnabled()) {
                                 logger.debug("Name: " + name);
                                 logger.debug("Timeseries: " + timeSeries);
@@ -159,29 +158,20 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
 
                             List<ElementPoint> points = timeSeries.getPoints();
 
-                            elementIdToNextRequestToken.put(elementId, timeSeries.getNextRequestToken());
+                            nextRequestToken = timeSeries.getNextRequestToken();
+                            Boolean isFromScratch = timeSeries.getIsFromScratch();
 
                             if (!points.isEmpty()) {
-                                // not the first
-                                ElementPoint previousLastPoint = elementIdToLastPoint.get(elementId);
-                                if (previousLastPoint != null) {
-                                    int lastPointIndex = points.lastIndexOf(previousLastPoint);
-                                    points = points.subList(lastPointIndex, points.size() - 1);
-                                }
-                                if (!points.isEmpty()) {
-                                    previousLastPoint = points.get(points.size() - 1);
-                                    elementIdToLastPoint.put(elementId, previousLastPoint);
-                                    logger.info("Sending " + points.size() + " points to InfluxDB for element: " + name);
+                                logger.info("Sending " + points.size() + " points to InfluxDB for element: " + name + " with isFromScratch: " + isFromScratch);
 
-                                    // expected to replace values for each loop
-                                    tags.put("name", name);
-                                    tags.put("userPath", idToUserPath.get(elementId));
+                                // expected to replace values for each loop
+                                tags.put("name", name);
+                                tags.put("userPath", idToUserPath.get(elementId));
 
-                                    influxWriter.get().uploadElementPointsTimeSeriesToInfluxDB(
-                                            points,
-                                            testStartTime.get(),
-                                            tags);
-                                }
+                                influxWriter.get().uploadElementPointsTimeSeriesToInfluxDB(
+                                        points,
+                                        testStartTime.get(),
+                                        tags);
                             }
                         }
                     } else {
@@ -223,12 +213,10 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
         }
     }
 
-
     private Runnable createResultsFromNeoloadToInfluxThread() {
         return () -> {
 
             String nextRequestToken = null;
-            Point lastPoint = null;
             Map<String, String> tags = Map.of(
                     "systemUnderTest", testContext.getSystemUnderTest(),
                     "testEnvironment", testContext.getTestEnvironment(),
@@ -243,23 +231,16 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                             && testStartTime.get() != null) {
                         ResultTimeseries result = client.get().resultsTimeSeries(testExecutionId, nextRequestToken);
                         nextRequestToken = result.getNextRequestToken();
+                        boolean isFromScratch = result.getIsFromScratch();
 
                         List<Point> points = result.getPoints();
 
                         if (!points.isEmpty()) {
-                            // not the first
-                            if (lastPoint != null) {
-                                int lastPointIndex = points.lastIndexOf(lastPoint);
-                                points = points.subList(lastPointIndex, points.size() - 1);
-                            }
-                            if (!points.isEmpty()) {
-                                lastPoint = points.get(points.size() - 1);
-                                logger.info("Sending " + points.size() + " points to InfluxDB");
-                                influxWriter.get().uploadResultsTimeSeriesToInfluxDB(
-                                        points,
-                                        testStartTime.get(),
-                                        tags);
-                            }
+                            logger.info("Sending " + points.size() + " points to InfluxDB with isFromScratch: " + isFromScratch);
+                            influxWriter.get().uploadResultsTimeSeriesToInfluxDB(
+                                    points,
+                                    testStartTime.get(),
+                                    tags);
                         }
                     } else {
                         logger.info("No data available yet, not fetching results to send to InfluxDB, will retry");

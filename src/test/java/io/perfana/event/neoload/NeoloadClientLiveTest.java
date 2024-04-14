@@ -185,16 +185,19 @@ class NeoloadClientLiveTest {
         List<ResultElementValue> items = response.getItems();
         // items collect to map
         Map<String, String> nameToIds = items.stream()
-                .collect(Collectors.toMap(ResultElementValue::getName, ResultElementValue::getId));
+                .collect(Collectors.toMap(ResultElementValue::getId, ResultElementValue::getName));
 
+        // note: next token only works on running test
+        String requestToken = null;
         // for each map entry
         for (Map.Entry<String, String> entry : nameToIds.entrySet()) {
-            String name = entry.getKey();
-            String id = entry.getValue();
-            ElementTimeSeries timeseries = client.getResultElementTimeSeries(resultId, id);
+            String id = entry.getKey();
+            String name = entry.getValue();
+            ElementTimeSeries timeseries = client.getResultElementTimeSeries(resultId, id, requestToken);
             assertNotNull(timeseries);
             System.out.println("Name: " + name);
             System.out.println("Timeseries: " + timeseries);
+            requestToken = timeseries.getNextRequestToken();
         }
 
         assertNotNull(response);
@@ -208,7 +211,7 @@ class NeoloadClientLiveTest {
         String resultId = "bf990cfc-14f8-4765-99bb-140c353ca782";
         String elementId = "29259a3e-ae5a-4724-b12d-33801d264d3a";
 
-        ElementTimeSeries timeseries = client.getResultElementTimeSeries(resultId, elementId);
+        ElementTimeSeries timeseries = client.getResultElementTimeSeries(resultId, elementId, null);
         assertNotNull(timeseries);
         System.out.println("Timeseries: " + timeseries);
     }
@@ -231,11 +234,36 @@ class NeoloadClientLiveTest {
 
         try (InfluxWriterNative influxWriter = new InfluxWriterNative(config, EventLoggerStdOut.INSTANCE_DEBUG)) {
             NeoloadInfluxWriter neoloadWriter = new NeoloadInfluxWriter(influxWriter);
-            Map<String, String> tags = Collections.singletonMap("application", "Afterburner");
+            Map<String, String> tags = Collections.singletonMap("systemUnderTest", "Afterburner");
             neoloadWriter.uploadResultsTimeSeriesToInfluxDB(result.getPoints(), Instant.now(), tags);
         }
 
         assertFalse(result.getPoints().isEmpty());
+    }
+
+    @Test
+    //@Disabled("only works with real influxdb to connect to")
+    void testErrorEventsToRealInfluxDB() throws Exception {
+
+        NeoloadClient client = createRealNeoloadClient();
+
+        String resultId = "46b1d9c5-6909-43b7-a3ab-8321df12dd64";
+
+        EventPage result = client.getResultEvents(resultId);
+        System.out.println(result);
+
+//        String influxDbUrl = "http://localhost:8086";
+//        String influxDbDatabase = "neoload";
+//
+//        InfluxWriterConfig config = new InfluxWriterConfig(influxDbUrl, influxDbDatabase);
+//
+//        try (InfluxWriterNative influxWriter = new InfluxWriterNative(config, EventLoggerStdOut.INSTANCE_DEBUG)) {
+//            NeoloadInfluxWriter neoloadWriter = new NeoloadInfluxWriter(influxWriter);
+//            Map<String, String> tags = Collections.singletonMap("systemUnderTest", "Afterburner");
+//            neoloadWriter.uploadResultsTimeSeriesToInfluxDB(result.getPoints(), Instant.now(), tags);
+//        }
+
+        assertFalse(result.getItems().isEmpty());
     }
 
 }
