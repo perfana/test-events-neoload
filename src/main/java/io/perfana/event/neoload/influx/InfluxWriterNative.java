@@ -43,21 +43,25 @@ public class InfluxWriterNative implements InfluxWriter {
 
     private final AtomicLong nextFlush = new AtomicLong(System.currentTimeMillis());
 
-    private static final int maxBatchSize = 1_000;
-    private static final int maxBatchAgeMs = 5_000;
+    private static final int MAX_BATCH_SIZE = 1_000;
+    private static final int MAX_BATCH_AGE_MS = 5_000;
 
     private final Object bufferLock = new Object();
 
     private final URI writeUri;
 
+    private final InfluxWriterConfig config;
+
     public InfluxWriterNative(InfluxWriterConfig config, EventLogger logger) {
 
         this.log = logger;
 
+        this.config = config;
+
         this.httpClient = createHttpClient(config);
 
         Map<String, String> requestParams = initializeRequestParams(config);
-        this.writeUri = createWriteUri(requestParams, config.getUrl());
+        this.writeUri = createWriteUri(config.getUrl(), requestParams);
 
     }
 
@@ -76,21 +80,39 @@ public class InfluxWriterNative implements InfluxWriter {
             });
         }
 
-        HttpClient client = builder.build();
-        return client;
+        return builder.build();
     }
 
     @Override
     public boolean isHealthy() {
-        // TODO: implement health check
-        return true;
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(config.getUrl() + "/health"))
+                .build();
+        try {
+            HttpResponse<String> send = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            int statusCode = send.statusCode();
+            if (statusCode == 200) {
+                log.info("Influx is healthy.");
+                return true;
+            }
+            else {
+                log.info("Influx not healthy. Status code: " + statusCode + " Message: " + send.body());
+                return false;
+            }
+        } catch (IOException e) {
+            log.error("Failed to send Influx health request", e);
+            return false;
+        } catch (InterruptedException e) {
+            log.error("Influx health request was interrupted", e);
+            Thread.currentThread().interrupt();
+            return false;
+        }
     }
 
     @Override
     public void writeMetricPoint(Instant timestamp, String key, Map<String, Number> inputFields, Map<String, String> inputTags) {
 
         // Line protocol: https://github.com/influxdata/influxdb/blob/master/tsdb/README.md
-        // neoload.NAME,application=afterburner duration=0.172 1691147875098417583
 
         long timestampEpochNano = InfluxWriter.toEpochNs(timestamp);
 
@@ -151,12 +173,12 @@ public class InfluxWriterNative implements InfluxWriter {
     }
 
     private void clearBuffer() {
-        nextFlush.set(System.currentTimeMillis() + maxBatchAgeMs);
+        nextFlush.set(System.currentTimeMillis() + MAX_BATCH_AGE_MS);
         metricsBuffer.clear();
     }
 
     private boolean bufferIsFullOrExpired() {
-        return (metricsBuffer.size() > maxBatchSize) || (nextFlush.get() < System.currentTimeMillis());
+        return (metricsBuffer.size() > MAX_BATCH_SIZE) || (nextFlush.get() < System.currentTimeMillis());
     }
 
     private void sendInfluxData(String data) {
@@ -187,7 +209,7 @@ public class InfluxWriterNative implements InfluxWriter {
     }
 
     @NotNull
-    private URI createWriteUri(Map<String, String> requestParams, String baseUrl) {
+    private URI createWriteUri(String baseUrl, Map<String, String> requestParams) {
         String requestParamsString = requestParams.entrySet().stream()
                 .map(e -> e.getKey() + "=" + (e.getValue() == null || e.getValue().isEmpty() ? "" : URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8)))
                 .collect(Collectors.joining("&"));

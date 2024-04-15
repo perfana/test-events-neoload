@@ -54,6 +54,7 @@ public class NeoloadClient {
             "requestCountPerSecond",
             "requestErrors",
             "userLoad");
+    public static final String CALL_TO_NEOLOAD_FAILED = "call to Neoload failed";
 
     private final ObjectMapper objectMapper = createCustomObjectMapper();
 
@@ -106,29 +107,11 @@ public class NeoloadClient {
         this.proxyPort = proxyPort;
     }
 
-    private static void checkBaseUrl(String baseUrl) {
-        try {
-            new URI(baseUrl);
-        } catch (URISyntaxException e) {
-            throw new NeoloadClientException("Invalid base url provided: " + baseUrl, e);
-        }
-    }
-
-    private String removeLastSlashIfPresent(String url) {
-        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
-    }
-
-    private void notEmpty(String field, String name) {
-        if (field == null || field.isEmpty()) {
-            throw new NeoloadClientException(name + " is null or empty");
-        }
-    }
-
     private HttpClient createHttpClient(boolean useProxy) {
 
         RequestConfig requestConfig = RequestConfig.custom()
             .setConnectionRequestTimeout(1_000)
-            .setConnectTimeout(4_000)
+            .setConnectTimeout(5_000)
             .setSocketTimeout(10_000).build();
 
         HttpClientBuilder httpClientBuilder = HttpClients.custom()
@@ -144,47 +127,15 @@ public class NeoloadClient {
         return httpClientBuilder.build();
     }
 
-    private static String responseToString(HttpResponse response) throws IOException {
-        StringBuilder result = new StringBuilder(1024);
-        try (BufferedReader rd = new BufferedReader(
-                new InputStreamReader(response.getEntity().getContent()))) {
-
-            String line;
-            while ((line = rd.readLine()) != null) {
-                result.append(line);
-            }
-        }
-        return result.toString();
-    }
-
-    private HttpResponse executeRequest(HttpUriRequest request) throws IOException {
-        HttpResponse response = httpClient.execute(request);
-        int statusCode = response.getStatusLine().getStatusCode();
-        if (statusCode < 200 || statusCode > 299) {
-            String result = responseToString(response);
-            throw new NeoloadClientException(String.format("Unexpected status code: %d for request: %s. Contents: %s", statusCode, request, result));
-        }
-        return response;
-    }
-
     public CurrentUser me() {
-
         String uri = String.format("%s/me", baseUrl);
-
         try {
             URIBuilder uriBuilder = new URIBuilder(uri);
-
-            HttpGet get = new HttpGet(uriBuilder.build());
-            get.setHeader("accountToken", accountToken);
-            get.setHeader("accept", "application/json");
-            HttpResponse response = executeRequest(get);
-            String result = responseToString(response);
-            logger.debug(result);
-
+            String result = executeGet(uriBuilder);
             return currentUserReader.readValue(result);
 
         } catch (URISyntaxException | IOException e) {
-            throw new NeoloadClientException("call to Neoload failed", e);
+            throw new NeoloadClientException(CALL_TO_NEOLOAD_FAILED, e);
         }
     }
 
@@ -195,16 +146,10 @@ public class NeoloadClient {
         try {
             URIBuilder uriBuilder = new URIBuilder(uri);
 
-            HttpDelete delete = new HttpDelete(uriBuilder.build());
-            delete.setHeader("accountToken", accountToken);
-            delete.setHeader("accept", "*/*");
-            HttpResponse response = executeRequest(delete);
-            if (response.getStatusLine().getStatusCode() != 202) {
-                throw new NeoloadClientException("cancel test run failed with status code: " + response.getStatusLine().getStatusCode());
-            }
+            executeDelete(uriBuilder);
 
         } catch (URISyntaxException | IOException e) {
-            throw new NeoloadClientException("call to Neoload failed", e);
+            throw new NeoloadClientException(CALL_TO_NEOLOAD_FAILED, e);
         }
     }
 
@@ -214,21 +159,12 @@ public class NeoloadClient {
         try {
             URIBuilder uriBuilder = new URIBuilder(uri);
 
-            HttpPost post = new HttpPost(uriBuilder.build());
-            post.setHeader("accountToken", accountToken);
-            post.setHeader("accept", "application/json");
-            post.setHeader("Content-Type", "application/json");
-            String requestBody = objectMapper.writeValueAsString(input);
-            post.setEntity(new StringEntity(requestBody));
-
-            HttpResponse response = executeRequest(post);
-            String result = responseToString(response);
-            logger.debug(result);
+            String result = executePost(uriBuilder, input);
 
             return testExecutionReader.readValue(result);
 
         } catch (URISyntaxException | IOException e) {
-            throw new NeoloadClientException("call to Neoload failed", e);
+            throw new NeoloadClientException(CALL_TO_NEOLOAD_FAILED, e);
         }
     }
 
@@ -243,18 +179,12 @@ public class NeoloadClient {
                     .setParameter("pageSize", "25")
                     .setParameter("sort", "-updatedAt");
 
-            HttpGet get = new HttpGet(uriBuilder.build());
-            get.setHeader("accountToken", accountToken);
-            get.setHeader("accept", "application/json");
-
-            HttpResponse response = executeRequest(get);
-            String result = responseToString(response);
-            logger.debug(result);
+            String result = executeGet(uriBuilder);
 
             return testPageReader.readValue(result);
 
         } catch (URISyntaxException | IOException e) {
-            throw new NeoloadClientException("call to Neoload failed", e);
+            throw new NeoloadClientException(CALL_TO_NEOLOAD_FAILED, e);
         }
     }
 
@@ -285,18 +215,12 @@ public class NeoloadClient {
             }
             uriBuilder.addParameter("fixedWindowDuration", Duration.ofMinutes(10).toString());
 
-            HttpGet get = new HttpGet(uriBuilder.build());
-            get.setHeader("accountToken", accountToken);
-            get.setHeader("accept", "application/json");
-
-            HttpResponse response = executeRequest(get);
-            String result = responseToString(response);
-            logger.debug(result);
+            String result = executeGet(uriBuilder);
 
             return resultTimeSeriesReader.readValue(result);
 
         } catch (URISyntaxException | IOException e) {
-            throw new NeoloadClientException("call to Neoload failed", e);
+            throw new NeoloadClientException(CALL_TO_NEOLOAD_FAILED, e);
         }
     }
 
@@ -306,17 +230,11 @@ public class NeoloadClient {
 
         try {
             URIBuilder uriBuilder = new URIBuilder(uri);
-            HttpGet get = new HttpGet(uriBuilder.build());
-            get.setHeader("accountToken", accountToken);
-            get.setHeader("accept", "application/json");
-
-            HttpResponse response = executeRequest(get);
-            String result = responseToString(response);
-            logger.debug(result);
+            String result = executeGet(uriBuilder);
 
             return getTestExecutionsResponseReader.readValue(result);
         } catch (URISyntaxException | IOException e) {
-            throw new NeoloadClientException("call to Neoload failed", e);
+            throw new NeoloadClientException(CALL_TO_NEOLOAD_FAILED, e);
         }
     }
 
@@ -338,18 +256,12 @@ public class NeoloadClient {
             uriBuilder.addParameter("pageSize", "25");
             uriBuilder.addParameter("sort", "-startDate");
 
-            HttpGet get = new HttpGet(uriBuilder.build());
-            get.setHeader("accountToken", accountToken);
-            get.setHeader("accept", "application/json");
-
-            HttpResponse response = executeRequest(get);
-            String result = responseToString(response);
-            logger.debug(result);
+            String result = executeGet(uriBuilder);
 
             return testResultPageReader.readValue(result);
 
         } catch (URISyntaxException | IOException e) {
-            throw new NeoloadClientException("call to Neoload failed", e);
+            throw new NeoloadClientException(CALL_TO_NEOLOAD_FAILED, e);
         }
     }
 
@@ -358,41 +270,29 @@ public class NeoloadClient {
 
         try {
             URIBuilder uriBuilder = new URIBuilder(uri);
-            HttpGet get = new HttpGet(uriBuilder.build());
-            get.setHeader("accountToken", accountToken);
-            get.setHeader("accept", "application/json");
-
-            HttpResponse response = executeRequest(get);
-            String result = responseToString(response);
-            logger.debug(result);
+            String result = executeGet(uriBuilder);
 
             return testReader.readValue(result);
         } catch (URISyntaxException | IOException e) {
-            throw new NeoloadClientException("call to Neoload failed", e);
+            throw new NeoloadClientException(CALL_TO_NEOLOAD_FAILED, e);
         }
     }
 
-    public GetResultElementValuesResponse getResultElementsValues(String resultId) {
+    public GetResultElementValuesResponse getResultElementsValues(String resultId, ElementsValuesFilter.ElementTypeEnum elementType) {
         String uri = String.format("%s/results/%s/elements/values", baseUrl, resultId);
 
         try {
             URIBuilder uriBuilder = new URIBuilder(uri);
-            uriBuilder.setParameter("elementType", ElementsValuesFilter.ElementTypeEnum.TRANSACTION.getValue());
+            uriBuilder.setParameter("elementType", elementType.getValue());
             uriBuilder.setParameter("sort", "-name");
             uriBuilder.setParameter("pageNumber", "0");
             uriBuilder.setParameter("pageSize", "100");
 
-            HttpGet get = new HttpGet(uriBuilder.build());
-            get.setHeader("accountToken", accountToken);
-            get.setHeader("accept", "application/json");
-
-            HttpResponse response = executeRequest(get);
-            String result = responseToString(response);
-            logger.debug(result);
+            String result = executeGet(uriBuilder);
 
             return getResultElementValuesResponseReader.readValue(result);
         } catch (URISyntaxException | IOException e) {
-            throw new NeoloadClientException("call to Neoload failed", e);
+            throw new NeoloadClientException(CALL_TO_NEOLOAD_FAILED, e);
         }
     }
 
@@ -411,17 +311,11 @@ public class NeoloadClient {
                 uriBuilder.addParameter("requestToken", requestToken);
             }
 
-            HttpGet get = new HttpGet(uriBuilder.build());
-            get.setHeader("accountToken", accountToken);
-            get.setHeader("accept", "application/json");
-
-            HttpResponse response = executeRequest(get);
-            String result = responseToString(response);
-            logger.debug(result);
+            String result = executeGet(uriBuilder);
 
             return elementTimeSeriesReader.readValue(result);
         } catch (URISyntaxException | IOException e) {
-            throw new NeoloadClientException("call to Neoload failed", e);
+            throw new NeoloadClientException(CALL_TO_NEOLOAD_FAILED, e);
         }
     }
 
@@ -435,19 +329,87 @@ public class NeoloadClient {
             uriBuilder.addParameter("sort", "-offset");
             uriBuilder.addParameter("types", "ERROR");
 
-            HttpGet get = new HttpGet(uriBuilder.build());
-            get.setHeader("accountToken", accountToken);
-            get.setHeader("accept", "application/json");
-
-            HttpResponse response = executeRequest(get);
-            String result = responseToString(response);
-            logger.debug(result);
+            String result = executeGet(uriBuilder);
 
             return eventPageReader.readValue(result);
         } catch (URISyntaxException | IOException e) {
-            throw new NeoloadClientException("call to Neoload failed", e);
+            throw new NeoloadClientException(CALL_TO_NEOLOAD_FAILED, e);
         }
     }
 
+    private String executeGet(URIBuilder uriBuilder) throws URISyntaxException, IOException {
+        HttpGet get = new HttpGet(uriBuilder.build());
+        get.setHeader("accountToken", accountToken);
+        get.setHeader("accept", "application/json");
 
+        HttpResponse response = executeRequest(get);
+        String result = responseToString(response);
+        logger.debug(result);
+        return result;
+    }
+
+    private String executePost(URIBuilder uriBuilder, TestExecutionInput input) throws URISyntaxException, IOException {
+        HttpPost post = new HttpPost(uriBuilder.build());
+        post.setHeader("accountToken", accountToken);
+        post.setHeader("accept",  "application/json");
+        post.setHeader("Content-Type", "application/json");
+        String requestBody = objectMapper.writeValueAsString(input);
+        post.setEntity(new StringEntity(requestBody));
+
+        HttpResponse response = executeRequest(post);
+        String result = responseToString(response);
+        logger.debug(result);
+        return result;
+    }
+
+    private static String responseToString(HttpResponse response) throws IOException {
+        StringBuilder result = new StringBuilder(1024);
+        try (BufferedReader rd = new BufferedReader(
+                new InputStreamReader(response.getEntity().getContent()))) {
+
+            String line;
+            while ((line = rd.readLine()) != null) {
+                result.append(line);
+            }
+        }
+        return result.toString();
+    }
+
+    private void executeDelete(URIBuilder uriBuilder) throws URISyntaxException, IOException {
+        HttpDelete delete = new HttpDelete(uriBuilder.build());
+        delete.setHeader("accountToken", accountToken);
+        delete.setHeader("accept", "*/*");
+        HttpResponse response = executeRequest(delete);
+        if (response.getStatusLine().getStatusCode() != 202) {
+            throw new NeoloadClientException("cancel test run failed with status code: " + response.getStatusLine().getStatusCode());
+        }
+    }
+
+    private HttpResponse executeRequest(HttpUriRequest request) throws IOException {
+        HttpResponse response = httpClient.execute(request);
+        int statusCode = response.getStatusLine().getStatusCode();
+        if (statusCode < 200 || statusCode > 299) {
+            String result = responseToString(response);
+            throw new NeoloadClientException(String.format("Unexpected status code: %d for request: %s. Contents: %s", statusCode, request, result));
+        }
+        return response;
+    }
+
+    private static void checkBaseUrl(String baseUrl) {
+        try {
+            new URI(baseUrl);
+        } catch (URISyntaxException e) {
+            throw new NeoloadClientException("Invalid base url provided: " + baseUrl, e);
+        }
+    }
+
+    private String removeLastSlashIfPresent(String url) {
+        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
+    }
+
+    private void notEmpty(String field, String name) {
+        if (field == null || field.isEmpty()) {
+            throw new NeoloadClientException(name + " is null or empty");
+        }
+    }
 }

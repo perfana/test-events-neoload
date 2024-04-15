@@ -19,11 +19,13 @@ import io.perfana.event.neoload.influx.InfluxWriterConfig;
 import io.perfana.event.neoload.influx.InfluxWriterNative;
 import io.perfana.event.neoload.influx.NeoloadInfluxWriter;
 import io.perfana.event.neoload.model.*;
+import io.perfana.event.neoload.model.ElementsValuesFilter.ElementTypeEnum;
 import io.perfana.event.neoload.model.GetTestExecutionResponse.StepEnum;
 import io.perfana.eventscheduler.api.EventAdapter;
 import io.perfana.eventscheduler.api.EventLogger;
 import io.perfana.eventscheduler.api.config.TestContext;
 import io.perfana.eventscheduler.api.message.EventMessage;
+import io.perfana.eventscheduler.api.message.EventMessage.EventMessageBuilder;
 import io.perfana.eventscheduler.api.message.EventMessageBus;
 
 import java.time.Duration;
@@ -74,6 +76,9 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
 
         InfluxWriterConfig config = eventContext.getInfluxWriterConfig();
         InfluxWriterNative writer = new InfluxWriterNative(config, logger);
+        if (!writer.isHealthy()) {
+            throw new NeoloadEventException("Influx writer is not healthy.");
+        }
         influxWriter.set(new NeoloadInfluxWriter(writer));
 
         TestExecutionInput input = new TestExecutionInput();
@@ -88,43 +93,43 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
         this.testExecutionId = testExecution.getId();
         this.workspaceId = testExecution.getWorkspaceId();
 
-        EventMessage message = EventMessage.builder()
-                .pluginName(pluginName())
-                .variable(PERFANA_NEOLOAD_PREFIX + "testExecutionId", testExecutionId)
-                .variable(PERFANA_NEOLOAD_PREFIX + "testId", testId)
-                .variable(PERFANA_NEOLOAD_PREFIX + "workspaceId", workspaceId)
-                .build();
-        eventMessageBus.send(message);
+        Map<String, String> variables = Map.of(
+                PERFANA_NEOLOAD_PREFIX + "testExecutionId", testExecutionId,
+                PERFANA_NEOLOAD_PREFIX + "testId", testId,
+                PERFANA_NEOLOAD_PREFIX + "workspaceId", workspaceId);
+        sendEventBusVariables(variables);
 
         logger.info(String.format("started polling at %s if running for workspaceId: %s testId: %s testExecutionId: %s",
                 Instant.now(), workspaceId, testId, testExecutionId));
 
-        Runnable pollForTestRunning = createPollForTestRunningThread();
-        Executor executor1 = Executors.newSingleThreadExecutor(r -> new Thread(r, "NeoloadPollForTestRunning"));
-        executor1.execute(pollForTestRunning);
-
-        Runnable resultsFromNeoloadToInflux = createResultsFromNeoloadToInfluxThread();
-        Executor executor2 = Executors.newSingleThreadExecutor(r -> new Thread(r, "ResultsFromNeoloadToInflux"));
-        executor2.execute(resultsFromNeoloadToInflux);
-
-        Runnable seriesFromNeoloadToInflux = createResultSeriesFromNeoloadToInfluxThread();
-        Executor executor3 = Executors.newSingleThreadExecutor(r -> new Thread(r, "SeriesFromNeoloadToInflux"));
-        executor3.execute(seriesFromNeoloadToInflux);
+        startThread("NeoloadPollForTestRunning",
+                createPollForTestRunningThread());
+        startThread("ResultsFromNeoloadToInflux",
+                sendResultsFromNeoloadToInfluxThread());
+        startThread("ElementValuesAndSeriesFromNeoloadToInflux",
+                sendElementValuesAndElementSeriesFromNeoloadToInfluxThread());
 
         logger.info(String.format("before test finished at %s with test execution id: %s. Now waiting for test status RUNNING.",
             Instant.now(), testExecutionId));
     }
 
-    private Runnable createResultSeriesFromNeoloadToInfluxThread() {
+    private void sendEventBusVariables(Map<String, String> variables) {
+        EventMessageBuilder builder = EventMessage.builder();
+        builder.pluginName(pluginName());
+        variables.entrySet().forEach(v -> builder.variable(PERFANA_NEOLOAD_PREFIX + v.getKey(), v.getValue()));
+        eventMessageBus.send(builder.build());
+    }
+
+    private static void startThread(String neoloadPollForTestRunning, Runnable pollForTestRunning) {
+        Executor executor = Executors.newSingleThreadExecutor(r -> new Thread(r, neoloadPollForTestRunning));
+        executor.execute(pollForTestRunning);
+    }
+
+    private Runnable sendElementValuesAndElementSeriesFromNeoloadToInfluxThread() {
         return () -> {
 
-            //Map<String, String> elementIdToNextRequestToken = new HashMap<>();
-
             String nextRequestToken = null;
-            Map<String, String> tags = new HashMap<>();
-            tags.put("systemUnderTest", testContext.getSystemUnderTest());
-            tags.put("testEnvironment", testContext.getTestEnvironment());
-            tags.put("workload", testContext.getWorkload());
+            Map<String, String> tags = createBasicTagsFromTestContext();
 
             logger.info("Start thread to send series to Influx");
 
@@ -134,44 +139,52 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                             && testExecutionId != null
                             && testStartTime.get() != null) {
 
-                        GetResultElementValuesResponse response = client.get().getResultElementsValues(testResultId);
+                        // loop over TRANSACTION, REQUEST, ACTION and PAGE
+                        for (ElementTypeEnum elementType : ElementTypeEnum.values()) {
+                            GetResultElementValuesResponse response = client.get().getResultElementsValues(testResultId, elementType);
 
-                        List<ResultElementValue> items = response.getItems();
+                            List<ResultElementValue> items = response.getItems();
 
-                        Map<String, String> idToName = items.stream()
-                                .collect(Collectors.toMap(ResultElementValue::getId, ResultElementValue::getName));
+                            Map<String, String> idToName = items.stream()
+                                    .collect(Collectors.toMap(ResultElementValue::getId, ResultElementValue::getName));
 
-                        Map<String, String> idToUserPath = items.stream()
-                                .collect(Collectors.toMap(ResultElementValue::getId, ResultElementValue::getUserPath));
+                            Map<String, String> idToUserPath = items.stream()
+                                    .collect(Collectors.toMap(ResultElementValue::getId, ResultElementValue::getUserPath));
 
-                        sendPercentilesToInflux(items, idToName, idToUserPath, tags);
+                            // expected to replace value per loop
+                            tags.put("elementType", elementType.getValue());
+                            sendElementValuesToInflux(items, idToName, idToUserPath, tags);
 
-                        for (Map.Entry<String, String> entry : idToName.entrySet()) {
-                            String elementId = entry.getKey();
-                            String name = entry.getValue();
+                            for (Map.Entry<String, String> entry : idToName.entrySet()) {
+                                String elementId = entry.getKey();
+                                String name = entry.getValue();
 
-                            ElementTimeSeries timeSeries = client.get().getResultElementTimeSeries(testResultId, elementId, nextRequestToken);
-                            if (logger.isDebugEnabled()) {
-                                logger.debug("Name: " + name);
-                                logger.debug("Timeseries: " + timeSeries);
-                            }
+                                ElementTimeSeries timeSeries = client.get().getResultElementTimeSeries(testResultId, elementId, nextRequestToken);
+                                if (logger.isDebugEnabled()) {
+                                    logger.debug("Name: " + name);
+                                    logger.debug("TimeSeries: " + timeSeries);
+                                }
 
-                            List<ElementPoint> points = timeSeries.getPoints();
+                                List<ElementPoint> points = timeSeries.getPoints();
 
-                            nextRequestToken = timeSeries.getNextRequestToken();
-                            Boolean isFromScratch = timeSeries.getIsFromScratch();
+                                nextRequestToken = timeSeries.getNextRequestToken();
+                                Boolean isFromScratch = timeSeries.getIsFromScratch();
 
-                            if (!points.isEmpty()) {
-                                logger.info("Sending " + points.size() + " points to InfluxDB for element: " + name + " with isFromScratch: " + isFromScratch);
+                                if (!points.isEmpty()) {
+                                    logger.info("Sending " + points.size() + " points to InfluxDB " +
+                                            "for element: " + name +
+                                            " with isFromScratch: " + isFromScratch +
+                                            " for elementType: " + elementType);
 
-                                // expected to replace values for each loop
-                                tags.put("name", name);
-                                tags.put("userPath", idToUserPath.get(elementId));
+                                    // expected to replace values for each loop
+                                    tags.put("name", name);
+                                    tags.put("userPath", idToUserPath.get(elementId));
 
-                                influxWriter.get().uploadElementPointsTimeSeriesToInfluxDB(
-                                        points,
-                                        testStartTime.get(),
-                                        tags);
+                                    influxWriter.get().uploadElementPointsTimeSeriesToInfluxDB(
+                                            points,
+                                            testStartTime.get(),
+                                            tags);
+                                }
                             }
                         }
                     } else {
@@ -191,36 +204,35 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
         };
     }
 
-    private void sendPercentilesToInflux(List<ResultElementValue> items, Map<String, String> idToName, Map<String, String> idToUserPath, Map<String, String> tags) {
-        logger.info("Sending " + items.size() + " percentiles to Influx");
+    private Map<String, String> createBasicTagsFromTestContext() {
+        Map<String, String> tags = new HashMap<>();
+        tags.put("systemUnderTest", testContext.getSystemUnderTest());
+        tags.put("testEnvironment", testContext.getTestEnvironment());
+        tags.put("workload", testContext.getWorkload());
+        return tags;
+    }
 
-        for (ResultElementValue item : items) {
+    private void sendElementValuesToInflux(List<ResultElementValue> items, Map<String, String> idToName, Map<String, String> idToUserPath, Map<String, String> tags) {
+        logger.info("Sending " + items.size() + " elementValues to Influx for elementType: " + tags.get("elementType"));
 
-            Map<String, Number> percentiles = new HashMap<>();
-            percentiles.put("perc50", item.getPerc50().doubleValue());
-            percentiles.put("perc90", item.getPerc90().doubleValue());
-            percentiles.put("perc95", item.getPerc95().doubleValue());
-            percentiles.put("perc99", item.getPerc99().doubleValue());
+        for (ResultElementValue resultElementValue : items) {
 
             Map<String, String> extendedTags = new HashMap<>(tags);
-            extendedTags.put("name", idToName.get(item.getId()));
-            extendedTags.put("userPath", idToUserPath.get(item.getId()));
+            extendedTags.put("name", idToName.get(resultElementValue.getId()));
+            extendedTags.put("userPath", idToUserPath.get(resultElementValue.getId()));
 
-            influxWriter.get().uploadPercentilesToInfluxDB(
-                    percentiles,
+            influxWriter.get().uploadResultElementsToInfluxDB(
+                    resultElementValue,
                     Instant.now(),
                     extendedTags);
         }
     }
 
-    private Runnable createResultsFromNeoloadToInfluxThread() {
+    private Runnable sendResultsFromNeoloadToInfluxThread() {
         return () -> {
 
             String nextRequestToken = null;
-            Map<String, String> tags = Map.of(
-                    "systemUnderTest", testContext.getSystemUnderTest(),
-                    "testEnvironment", testContext.getTestEnvironment(),
-                    "workload", testContext.getWorkload());
+            Map<String, String> tags = createBasicTagsFromTestContext();
 
             logger.info("Start thread to send results to Influx");
 
@@ -298,19 +310,11 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                             if (testResult.getStatus() == TestResult.StatusEnum.RUNNING) {
                                 // used to get series in other thread
                                 testResultId = testResult.getId();
-
-                                EventMessage message = EventMessage.builder()
-                                        .pluginName(pluginName())
-                                        .variable(PERFANA_NEOLOAD_PREFIX + "testResultId", testResultId)
-                                        .build();
-                                eventMessageBus.send(message);
-
+                                sendEventBusVariables(Map.of("testResultId", testResultId));
                                 continuePolling = false;
                                 testRunStarted = true;
                                 testStartTime.set(testResult.getStartDate().toInstant());
-                            } else if (testResult.getStatus() == TestResult.StatusEnum.FAILED
-                                    || testResult.getStatus() == TestResult.StatusEnum.TERMINATED
-                                    || testResult.getStatus() == TestResult.StatusEnum.PASSED) {
+                            } else if (checkTestResultForEndState(testResult)) {
                                 continuePolling = false;
                             }
                         } else {
@@ -323,35 +327,19 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                     } catch (InterruptedException e) {
                         logger.warn("Interrupt received, will stop polling now.");
                         continuePolling = false;
-                        EventMessage stopMessage = EventMessage.builder()
-                                .pluginName(pluginName())
-                                .message("Stop!")
-                                .build();
-                        eventMessageBus.send(stopMessage);
+                        sendEventMessageStop();
                         Thread.currentThread().interrupt();
                     }
 
                     if (System.currentTimeMillis() > maxPollingTimestamp) {
                         logger.warn("Max polling period reached (" + eventContext.getPollingMaxDuration() + " seconds), will stop polling now.");
                         continuePolling = false;
-                        EventMessage stopMessage = EventMessage.builder()
-                                .pluginName(pluginName())
-                                .message("Stop!")
-                                .build();
-                        eventMessageBus.send(stopMessage);
+                        sendEventMessageStop();
                     } else {
                         if (testRunStarted) {
-                            EventMessage goMessage = EventMessage.builder()
-                                    .pluginName(pluginName())
-                                    .message("Go!")
-                                    .build();
-                            eventMessageBus.send(goMessage);
+                            sendEventMessageGo();
                         } else {
-                            EventMessage stopMessage = EventMessage.builder()
-                                    .pluginName(pluginName())
-                                    .message("Stop!")
-                                    .build();
-                            eventMessageBus.send(stopMessage);
+                            sendEventMessageStop();
                         }
                     }
                 } catch (NeoloadClientException e) {
@@ -359,6 +347,28 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                 }
             }
         };
+    }
+
+    private static boolean checkTestResultForEndState(TestResult testResult) {
+        return testResult.getStatus() == TestResult.StatusEnum.FAILED
+                || testResult.getStatus() == TestResult.StatusEnum.TERMINATED
+                || testResult.getStatus() == TestResult.StatusEnum.PASSED;
+    }
+
+    private void sendEventMessageStop() {
+        EventMessage stopMessage = EventMessage.builder()
+                .pluginName(pluginName())
+                .message("Stop!")
+                .build();
+        eventMessageBus.send(stopMessage);
+    }
+
+    private void sendEventMessageGo() {
+        EventMessage goMessage = EventMessage.builder()
+                .pluginName(pluginName())
+                .message("Go!")
+                .build();
+        eventMessageBus.send(goMessage);
     }
 
     private void sendTracingHeader(String projectId, String loadTestId) {

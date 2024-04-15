@@ -19,6 +19,7 @@ import io.perfana.event.neoload.influx.InfluxWriterConfig;
 import io.perfana.event.neoload.influx.InfluxWriterNative;
 import io.perfana.event.neoload.influx.NeoloadInfluxWriter;
 import io.perfana.event.neoload.model.*;
+import io.perfana.event.neoload.model.ElementsValuesFilter.ElementTypeEnum;
 import io.perfana.eventscheduler.log.EventLoggerStdOut;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
@@ -161,9 +162,9 @@ class NeoloadClientLiveTest {
     void getResultElementValues() {
         NeoloadClient client = createRealNeoloadClient();
 
-        String resultId = "bf990cfc-14f8-4765-99bb-140c353ca782";
+        String resultId = "73ed5f82-799f-43ad-a768-a6b0601c8118";
 
-        GetResultElementValuesResponse response = client.getResultElementsValues(resultId);
+        GetResultElementValuesResponse response = client.getResultElementsValues(resultId, ElementTypeEnum.TRANSACTION);
 
         List<ResultElementValue> items = response.getItems();
         for (ResultElementValue item : items) {
@@ -180,7 +181,7 @@ class NeoloadClientLiveTest {
 
         String resultId = "bf990cfc-14f8-4765-99bb-140c353ca782";
 
-        GetResultElementValuesResponse response = client.getResultElementsValues(resultId);
+        GetResultElementValuesResponse response = client.getResultElementsValues(resultId, ElementTypeEnum.TRANSACTION);
 
         List<ResultElementValue> items = response.getItems();
         // items collect to map
@@ -217,12 +218,12 @@ class NeoloadClientLiveTest {
     }
 
     @Test
-    @Disabled("only works with real influxdb to connect to")
+    //@Disabled("only works with real influxdb to connect to")
     void testUploadTimeSeriesToRealInfluxDB() throws Exception {
 
         NeoloadClient client = createRealNeoloadClient();
 
-        String testId = "80a0e387-13b6-4b46-9bf5-162c58216eed";
+        String testId = "c25b0593-e109-4865-99b4-706ea8e4fe20";
 
         ResultTimeseries result = client.resultsTimeSeries(testId, null);
         System.out.println(result);
