@@ -103,6 +103,14 @@ public class NeoloadInfluxWriter {
         fields.computeIfAbsent("count", v -> doubleValueOrNull(value.getCount()));
         fields.computeIfAbsent("passed", calculatePassed);
 
+        String parent = value.getParent();
+        if (parent != null) {
+            tags.put("parent", parent);
+        }
+        else {
+            tags.remove("parent");
+        }
+
         writer.writeMetricPoint(timestamp, "elementValues", fields, tags);
     }
 

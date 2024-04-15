@@ -143,17 +143,17 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                         for (ElementTypeEnum elementType : ElementTypeEnum.values()) {
                             GetResultElementValuesResponse response = client.get().getResultElementsValues(testResultId, elementType);
 
-                            List<ResultElementValue> items = response.getItems();
+                            List<ResultElementValue> elementValues = response.getItems();
 
-                            Map<String, String> idToName = items.stream()
+                            Map<String, String> idToName = elementValues.stream()
                                     .collect(Collectors.toMap(ResultElementValue::getId, ResultElementValue::getName));
 
-                            Map<String, String> idToUserPath = items.stream()
+                            Map<String, String> idToUserPath = elementValues.stream()
                                     .collect(Collectors.toMap(ResultElementValue::getId, ResultElementValue::getUserPath));
 
                             // expected to replace value per loop
                             tags.put("elementType", elementType.getValue());
-                            sendElementValuesToInflux(items, idToName, idToUserPath, tags);
+                            sendElementValuesToInflux(elementValues, idToName, idToUserPath, tags);
 
                             for (Map.Entry<String, String> entry : idToName.entrySet()) {
                                 String elementId = entry.getKey();
