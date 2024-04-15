@@ -54,6 +54,7 @@ public class NeoloadClient {
             "requestCountPerSecond",
             "requestErrors",
             "userLoad");
+
     public static final String CALL_TO_NEOLOAD_FAILED = "call to Neoload failed";
 
     private final ObjectMapper objectMapper = createCustomObjectMapper();
@@ -191,21 +192,21 @@ public class NeoloadClient {
     /**
      * Get results as the test progresses.
      *
-     * @param testId the test run id
+     * @param resultId the result id
      * @param requestToken is null for first call, get from ResultTimeseries for subsequent calls.
      * @return results based on PT10M timewindow, use requestToken to fetch next data.
      */
-    public ResultTimeseries resultsTimeSeries(String testId, String requestToken) {
-        return resultsTimeSeries(testId, ALL_TIME_SERIES, requestToken);
+    public ResultTimeseries resultsTimeSeries(String resultId, String requestToken) {
+        return resultsTimeSeries(resultId, ALL_TIME_SERIES, requestToken);
     }
 
     /**
      * Start scraping live data.
      */
-    public ResultTimeseries resultsTimeSeries(String testId, List<String> series, String requestToken) {
-        notEmpty(testId, "testId");
+    public ResultTimeseries resultsTimeSeries(String resultId, List<String> series, String requestToken) {
+        notEmpty(resultId, "resultId");
 
-        String uri = String.format("%s/results/%s/timeseries", baseUrl, testId);
+        String uri = String.format("%s/results/%s/timeseries", baseUrl, resultId);
 
         try {
             URIBuilder uriBuilder = new URIBuilder(uri);
@@ -238,7 +239,7 @@ public class NeoloadClient {
         }
     }
 
-    public TestResultPage results(String workspaceId, List<TestResult.StatusEnum> status, List<String> testIds) {
+    public TestResultPage testResultsPage(String workspaceId, List<TestResult.StatusEnum> status, List<String> testIds) {
         notEmpty(workspaceId, "workspaceId");
 
         String uri = String.format("%s/results", baseUrl);

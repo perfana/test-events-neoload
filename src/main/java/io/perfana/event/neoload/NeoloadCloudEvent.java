@@ -302,7 +302,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                         }
                     } else if (checkStartTime) {
                         // find test results
-                        TestResultPage results = client.get().results(workspaceId, List.of(TestResult.StatusEnum.values()), List.of(testId));
+                        TestResultPage results = client.get().testResultsPage(workspaceId, List.of(TestResult.StatusEnum.values()), List.of(testId));
                         Optional<TestResult> testResultMaybe = results.getItems().stream().findFirst();
                         if (testResultMaybe.isPresent()) {
                             TestResult testResult = testResultMaybe.get();

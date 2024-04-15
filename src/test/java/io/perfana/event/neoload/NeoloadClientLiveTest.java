@@ -108,14 +108,14 @@ class NeoloadClientLiveTest {
 
     @Test
     @Disabled("only works with real influxdb to connect to")
-    void testResultsTimeSeries() throws InterruptedException {
+    void testTestResultsPageTimeSeries() throws InterruptedException {
         NeoloadClient client = createRealNeoloadClient();
 
-        String testId = "5a988a90-5f07-42f6-b6cd-10ead5e09f31";
+        String resultId = "5a988a90-5f07-42f6-b6cd-10ead5e09f31";
 
         String nextRequestToken = null;
         while (true) {
-            ResultTimeseries result = client.resultsTimeSeries(testId, nextRequestToken);
+            ResultTimeseries result = client.resultsTimeSeries(resultId, nextRequestToken);
             assertNotNull(result);
 
             nextRequestToken = result.getNextRequestToken();
@@ -142,12 +142,12 @@ class NeoloadClientLiveTest {
 
     @Test
     @Disabled("only works with real influxdb to connect to")
-    void testResults() {
+    void testTestResultsPage() {
         NeoloadClient client = createRealNeoloadClient();
 
         String workspaceId = System.getenv("NEOLOAD_WORKSPACE_ID");
 
-        TestResultPage result = client.results(workspaceId, Collections.emptyList(), Collections.emptyList());
+        TestResultPage result = client.testResultsPage(workspaceId, Collections.emptyList(), Collections.emptyList());
 
         List<TestResult> items = result.getItems();
         for (TestResult item : items) {
@@ -223,9 +223,9 @@ class NeoloadClientLiveTest {
 
         NeoloadClient client = createRealNeoloadClient();
 
-        String testId = "c25b0593-e109-4865-99b4-706ea8e4fe20";
+        String resultId = "5899043c-5366-4054-a147-a8d9b5152472";
 
-        ResultTimeseries result = client.resultsTimeSeries(testId, null);
+        ResultTimeseries result = client.resultsTimeSeries(resultId, null);
         System.out.println(result);
 
         String influxDbUrl = "http://localhost:8086";
