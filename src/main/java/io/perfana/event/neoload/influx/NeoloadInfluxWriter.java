@@ -114,10 +114,7 @@ public class NeoloadInfluxWriter {
         writer.writeMetricPoint(timestamp, "elementValues", fields, tags);
     }
 
-    public void uploadErrorToInfluxDB(Instant timestamp, String code, String stringContent, Duration errorDuration, Map<String, String> tags) {
-        Map<String, Object> fields = new HashMap<>();
-        fields.computeIfAbsent("code", v -> code);
-        fields.computeIfAbsent("stringContent", v -> stringContent);
+    public void uploadErrorToInfluxDB(Instant timestamp, Map<String,Object> fields, Duration errorDuration, Map<String, String> tags) {
         fields.computeIfAbsent("errorDuration", v -> errorDuration == null ? null : errorDuration.toMillis());
         writer.writeMetricPoint(timestamp, "errors", fields, tags);
     }

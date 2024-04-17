@@ -270,17 +270,6 @@ class NeoloadClientLiveTest {
 
         }
 
-//        String influxDbUrl = "http://localhost:8086";
-//        String influxDbDatabase = "neoload";
-//
-//        InfluxWriterConfig config = new InfluxWriterConfig(influxDbUrl, influxDbDatabase);
-//
-//        try (InfluxWriterNative influxWriter = new InfluxWriterNative(config, EventLoggerStdOut.INSTANCE_DEBUG)) {
-//            NeoloadInfluxWriter neoloadWriter = new NeoloadInfluxWriter(influxWriter);
-//            Map<String, String> tags = Collections.singletonMap("systemUnderTest", "Afterburner");
-//            neoloadWriter.uploadResultsTimeSeriesToInfluxDB(result.getPoints(), Instant.now(), tags);
-//        }
-
         assertFalse(result.getItems().isEmpty());
     }
 

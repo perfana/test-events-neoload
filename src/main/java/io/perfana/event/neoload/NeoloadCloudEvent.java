@@ -126,12 +126,12 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
         executor.execute(pollForTestRunning);
     }
 
-    private void sendErrorsFromNeoloadToInflux(Map<String, String> idToName, Map<String, String> idToUserPath) {
+    private void sendErrorsFromNeoloadToInflux() {
         logger.info("Start thread to send errors to Influx");
 
         Map<String, String> tags = createBasicTagsFromTestContext();
         // Start with timestamp that is little in the past
-        Instant lastOffsetTimestamp = Instant.now().minus(Duration.ofMinutes(10));
+        Instant lastSentTimestamp = Instant.now().minus(Duration.ofMinutes(10));
 
         while (testIsRunning) {
             try {
@@ -144,32 +144,65 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                     List<Event> events = result.getItems();
 
                     Instant eventTimestamp;
+                    int foundErrors = 0;
+                    int sentErrors = 0;
                     for (Event event : events) {
                         Duration offset = Duration.parse(event.getOffset());
                         // only new events since last time
                         eventTimestamp = testStartTime.get().plus(offset);
-                        if (eventTimestamp.isAfter(lastOffsetTimestamp)) {
+                        if (eventTimestamp.isAfter(lastSentTimestamp)) {
+                            foundErrors++;
                             String code = event.getCode();
                             String eventId = event.getId();
-                            String elementId = event.getElementId();
-                            ErrorEvent errorEvent = client.get().getResultEvent(testResultId, eventId);
-                            Duration errorDuration = Duration.parse(errorEvent.getDuration());
-                            String contentId = errorEvent.getFirstIterationCurrentResponse().getContentId();
-                            EventContent eventContents = client.get().getResultEventContents(testResultId, contentId);
-                            String stringContent = eventContents.getStringContent();
 
-                            tags.put("name", idToName.get(elementId));
-                            tags.put("userPath", idToUserPath.get(elementId));
+                            ErrorEvent errorEvent = client.get().getResultEvent(testResultId, eventId);
+
+                            String userPath = stripUserPathFromSource(errorEvent.getSource());
+
+                            ErrorEventDetails details = (ErrorEventDetails) errorEvent.getDetails();
+                            String transaction = details.getTransaction();
+                            String request = details.getRequest();
+
+
+                            Duration errorDuration = Duration.parse(errorEvent.getDuration());
+
+                            String statusLineRequest = errorEvent.getCurrentRequest().getStatusLine();
+                            String statusLineResponse = errorEvent.getCurrentResponse().getStatusLine();
+                            String contentIdReponse = errorEvent.getCurrentResponse().getContentId();
+                            String stringContentResponse = contentIdReponse != null ? getStringContent(contentIdReponse) : "<none>";
+
+                            RequestOrResponseDetails firstIterationResponse = errorEvent.getFirstIterationCurrentResponse();
+                            String stringContentFirstIteration;
+                            if (firstIterationResponse != null) {
+                                String contentId = firstIterationResponse.getContentId();
+                                stringContentFirstIteration = contentId != null ? getStringContent(contentId) : "<none>";
+                            }
+                            else {
+                                stringContentFirstIteration = "null";
+                            }
+
+                            Map<String, Object> fields = new HashMap<>();
+                            fields.put("code", code);
+                            fields.put("statusLineRequest", statusLineRequest);
+                            fields.put("statusLineResponse", statusLineResponse);
+                            fields.put("stringContentResponse", stringContentResponse);
+                            fields.put("stringContentFirstIteration", stringContentFirstIteration);
+
+                            sentErrors++;
+
+                            tags.put("request", request);
+                            tags.put("transaction", transaction);
+                            tags.put("userPath", userPath);
 
                             influxWriter.get().uploadErrorToInfluxDB(
                                     eventTimestamp,
-                                    code,
-                                    stringContent,
+                                    fields,
                                     errorDuration,
                                     tags);
                         }
-                        lastOffsetTimestamp = eventTimestamp;
+                        lastSentTimestamp = eventTimestamp;
                     }
+                    logger.info("Sent " + sentErrors + " errors for " + foundErrors + " found errors.");
                 } else {
                     logger.info("No data available yet, not fetching errors to send to InfluxDB, will retry");
                 }
@@ -177,6 +210,21 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                 logger.error("Failed to send errors to InfluxDB", e);
             }
         }
+    }
+
+    /**
+     * Get userPath from a source string as "UserPath1#0 - Actions#38"
+     */
+    private String stripUserPathFromSource(String source) {
+        if (source == null) { return "null"; }
+        int index = source.indexOf('#');
+        return index != -1 ? source.substring(0, index) : source;
+    }
+
+    private String getStringContent(String contentId) {
+        EventContent eventContents =
+                client.get().getResultEventContents(testResultId, contentId);
+        return eventContents.getStringContent();
     }
 
     private Runnable sendElementValuesAndElementSeriesAndErrorsFromNeoloadToInfluxThread() {
@@ -240,7 +288,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                                             tags);
                                 }
                             }
-                            sendErrorsFromNeoloadToInflux(idToName, idToUserPath);
+                            sendErrorsFromNeoloadToInflux();
                         }
                     } else {
                         logger.info("No data available yet, not fetching element values and errors to send to InfluxDB, will retry");
