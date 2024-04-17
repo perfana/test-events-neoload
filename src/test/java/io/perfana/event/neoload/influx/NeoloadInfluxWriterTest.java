@@ -38,7 +38,7 @@ class NeoloadInfluxWriterTest {
             }
 
             @Override
-            public void writeMetricPoint(Instant timestamp, String key, Map<String, Number> inputFields, Map<String, String> inputTags) {
+            public void writeMetricPoint(Instant timestamp, String key, Map<String, Object> inputFields, Map<String, String> inputTags) {
                 if (counter.incrementAndGet() == 1) {
                     Assertions.assertEquals(Instant.parse("2024-01-01T00:00:01.0Z"), timestamp);
                     Assertions.assertEquals("resultTimeSeries", key);

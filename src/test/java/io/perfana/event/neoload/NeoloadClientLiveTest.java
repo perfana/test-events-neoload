@@ -21,6 +21,7 @@ import io.perfana.event.neoload.influx.NeoloadInfluxWriter;
 import io.perfana.event.neoload.model.*;
 import io.perfana.event.neoload.model.ElementsValuesFilter.ElementTypeEnum;
 import io.perfana.eventscheduler.log.EventLoggerStdOut;
+import jakarta.validation.Valid;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
@@ -248,10 +249,26 @@ class NeoloadClientLiveTest {
 
         NeoloadClient client = createRealNeoloadClient();
 
-        String resultId = "46b1d9c5-6909-43b7-a3ab-8321df12dd64";
+        String resultId = "1c4d582b-44f8-4459-a4d9-dd72a2937e8a";
 
         EventPage result = client.getResultEvents(resultId);
         System.out.println(result);
+
+        List<@Valid Event> events = result.getItems();
+
+        for (Event event : events) {
+            Duration offset = Duration.parse(event.getOffset());
+            String code = event.getCode();
+            String eventId = event.getId();
+            ErrorEvent resultEvent = client.getResultEvent(resultId, eventId);
+            String contentId = resultEvent.getFirstIterationCurrentResponse().getContentId();
+            EventContent eventContents = client.getResultEventContents(resultId, contentId);
+            String stringContent = eventContents.getStringContent();
+
+            System.out.println("Offset: " + offset + ", code: " + code + ", eventId: " + eventId +
+                    ", contentId: " + contentId + ", stringContent: " + stringContent);
+
+        }
 
 //        String influxDbUrl = "http://localhost:8086";
 //        String influxDbDatabase = "neoload";

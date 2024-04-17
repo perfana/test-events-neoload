@@ -86,6 +86,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
         //input.setName(testContext.getProductName());
         //input.setDuration(Duration.ofMinutes(90).toString());
         input.setDescription("Run from test-events-neoload Perfana plugin");
+        // WORKAROUND: webVu=50 is needed for the Neoload API to work
         input.setWebVu(50);
 
         TestExecution testExecution = client.get().startRun(input);
@@ -107,7 +108,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
         startThread("ResultsFromNeoloadToInflux",
                 sendResultsFromNeoloadToInfluxThread());
         startThread("ElementValuesAndSeriesFromNeoloadToInflux",
-                sendElementValuesAndElementSeriesFromNeoloadToInfluxThread());
+                sendElementValuesAndElementSeriesAndErrorsFromNeoloadToInfluxThread());
 
         logger.info(String.format("before test finished at %s with test execution id: %s. Now waiting for test status RUNNING.",
             Instant.now(), testExecutionId));
@@ -125,7 +126,60 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
         executor.execute(pollForTestRunning);
     }
 
-    private Runnable sendElementValuesAndElementSeriesFromNeoloadToInfluxThread() {
+    private void sendErrorsFromNeoloadToInflux(Map<String, String> idToName, Map<String, String> idToUserPath) {
+        logger.info("Start thread to send errors to Influx");
+
+        Map<String, String> tags = createBasicTagsFromTestContext();
+        // Start with timestamp that is little in the past
+        Instant lastOffsetTimestamp = Instant.now().minus(Duration.ofMinutes(10));
+
+        while (testIsRunning) {
+            try {
+                if (client.get() != null
+                        && testExecutionId != null
+                        && testStartTime.get() != null) {
+
+                    EventPage result = client.get().getResultEvents(testResultId);
+
+                    List<Event> events = result.getItems();
+
+                    Instant eventTimestamp;
+                    for (Event event : events) {
+                        Duration offset = Duration.parse(event.getOffset());
+                        // only new events since last time
+                        eventTimestamp = testStartTime.get().plus(offset);
+                        if (eventTimestamp.isAfter(lastOffsetTimestamp)) {
+                            String code = event.getCode();
+                            String eventId = event.getId();
+                            String elementId = event.getElementId();
+                            ErrorEvent errorEvent = client.get().getResultEvent(testResultId, eventId);
+                            Duration errorDuration = Duration.parse(errorEvent.getDuration());
+                            String contentId = errorEvent.getFirstIterationCurrentResponse().getContentId();
+                            EventContent eventContents = client.get().getResultEventContents(testResultId, contentId);
+                            String stringContent = eventContents.getStringContent();
+
+                            tags.put("name", idToName.get(elementId));
+                            tags.put("userPath", idToUserPath.get(elementId));
+
+                            influxWriter.get().uploadErrorToInfluxDB(
+                                    eventTimestamp,
+                                    code,
+                                    stringContent,
+                                    errorDuration,
+                                    tags);
+                        }
+                        lastOffsetTimestamp = eventTimestamp;
+                    }
+                } else {
+                    logger.info("No data available yet, not fetching errors to send to InfluxDB, will retry");
+                }
+            } catch (Exception e) {
+                logger.error("Failed to send errors to InfluxDB", e);
+            }
+        }
+    }
+
+    private Runnable sendElementValuesAndElementSeriesAndErrorsFromNeoloadToInfluxThread() {
         return () -> {
 
             String nextRequestToken = null;
@@ -186,12 +240,13 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                                             tags);
                                 }
                             }
+                            sendErrorsFromNeoloadToInflux(idToName, idToUserPath);
                         }
                     } else {
-                        logger.info("No data available yet, not fetching results to send to InfluxDB, will retry");
+                        logger.info("No data available yet, not fetching element values and errors to send to InfluxDB, will retry");
                     }
                 } catch (Exception e) {
-                    logger.error("Failed to send data to InfluxDB", e);
+                    logger.error("Failed to send element values and errors to InfluxDB", e);
                 }
 
                 try {
@@ -258,7 +313,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                         logger.info("No data available yet, not fetching results to send to InfluxDB, will retry");
                     }
                 } catch (Exception e) {
-                    logger.error("Failed to send data to InfluxDB", e);
+                    logger.error("Failed to results to InfluxDB", e);
                 }
                 try {
                     Thread.sleep(sendInfluxDataDelay.toMillis());

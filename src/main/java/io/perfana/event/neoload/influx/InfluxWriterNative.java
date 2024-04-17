@@ -110,7 +110,7 @@ public class InfluxWriterNative implements InfluxWriter {
     }
 
     @Override
-    public void writeMetricPoint(Instant timestamp, String key, Map<String, Number> inputFields, Map<String, String> inputTags) {
+    public void writeMetricPoint(Instant timestamp, String key, Map<String, Object> inputFields, Map<String, String> inputTags) {
 
         // Line protocol: https://github.com/influxdata/influxdb/blob/master/tsdb/README.md
 
@@ -133,7 +133,7 @@ public class InfluxWriterNative implements InfluxWriter {
         Map<String, String> fields = new HashMap<>();
         // note: field String values must be quoted, unlike tags
         if (!inputFields.isEmpty()) {
-            for (Map.Entry<String, Number> entry : inputFields.entrySet()) {
+            for (Map.Entry<String, Object> entry : inputFields.entrySet()) {
                 Object value = entry.getValue();
                 String escapedValue = escapeFieldForInflux(value);
                 fields.put(entry.getKey(), escapedValue);

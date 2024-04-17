@@ -22,7 +22,7 @@ public interface InfluxWriter extends AutoCloseable {
 
     boolean isHealthy();
 
-    void writeMetricPoint(Instant timestamp, String key, Map<String, Number> fields, Map<String, String> tags);
+    void writeMetricPoint(Instant timestamp, String key, Map<String, Object> fields, Map<String, String> tags);
 
     static long toEpochNs(Instant timestamp) {
         return (timestamp.toEpochMilli() * 1_000_000) + timestamp.getNano();

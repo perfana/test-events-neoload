@@ -42,7 +42,7 @@ public class NeoloadInfluxWriter {
         for (Point point : points) {
             Instant timestamp = startTime.plus(Duration.parse(point.getOffset()));
 
-            Map<String, Number> fields = new HashMap<>();
+            Map<String, Object> fields = new HashMap<>();
             fields.computeIfAbsent("requestAvgDuration", v -> point.getRequestAvgDuration());
             fields.computeIfAbsent("requestErrors", v -> point.getRequestErrors());
             fields.computeIfAbsent("userLoad", v -> point.getUserLoad());
@@ -63,7 +63,7 @@ public class NeoloadInfluxWriter {
             Function<String, Double> calculatePassed =
                     v -> doubleValueOrZero(point.getCount()) - doubleValueOrZero(point.getErrors());
 
-            Map<String, Number> fields = new HashMap<>();
+            Map<String, Object> fields = new HashMap<>();
             fields.computeIfAbsent("avgDuration", v -> point.getAvgDuration());
             fields.computeIfAbsent("minDuration", v -> point.getMinDuration());
             fields.computeIfAbsent("maxDuration", v -> point.getMaxDuration());
@@ -90,7 +90,7 @@ public class NeoloadInfluxWriter {
         Function<String, Double> calculatePassed =
                 v -> doubleValueOrZero(value.getCount()) - doubleValueOrZero(value.getErrors());
 
-        Map<String, Number> fields = new HashMap<>();
+        Map<String, Object> fields = new HashMap<>();
         fields.computeIfAbsent("perc50", v -> doubleValueOrNull(value.getPerc50()));
         fields.computeIfAbsent("perc90", v -> doubleValueOrNull(value.getPerc90()));
         fields.computeIfAbsent("perc95", v -> doubleValueOrNull(value.getPerc95()));
@@ -112,6 +112,14 @@ public class NeoloadInfluxWriter {
         }
 
         writer.writeMetricPoint(timestamp, "elementValues", fields, tags);
+    }
+
+    public void uploadErrorToInfluxDB(Instant timestamp, String code, String stringContent, Duration errorDuration, Map<String, String> tags) {
+        Map<String, Object> fields = new HashMap<>();
+        fields.computeIfAbsent("code", v -> code);
+        fields.computeIfAbsent("stringContent", v -> stringContent);
+        fields.computeIfAbsent("errorDuration", v -> errorDuration == null ? null : errorDuration.toMillis());
+        writer.writeMetricPoint(timestamp, "errors", fields, tags);
     }
 
     private Double doubleValueOrNull(BigDecimal value) {

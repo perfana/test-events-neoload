@@ -44,6 +44,9 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URLEncoder;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 
@@ -83,6 +86,8 @@ public class NeoloadClient {
     private final ObjectReader getResultElementValuesResponseReader = objectMapper.readerFor(GetResultElementValuesResponse.class);
     private final ObjectReader elementTimeSeriesReader = objectMapper.readerFor(ElementTimeSeries.class);
     private final ObjectReader eventPageReader = objectMapper.readerFor(EventPage.class);
+    private final ObjectReader errorEventReader = objectMapper.readerFor(ErrorEvent.class);
+    private final ObjectReader eventContentReader = objectMapper.readerFor(EventContent.class);
 
     private final HttpClient httpClient;
     private final String baseUrl;
@@ -411,6 +416,35 @@ public class NeoloadClient {
     private void notEmpty(String field, String name) {
         if (field == null || field.isEmpty()) {
             throw new NeoloadClientException(name + " is null or empty");
+        }
+    }
+
+    public ErrorEvent getResultEvent(String resultId, String eventId) {
+        String uri = String.format("%s/results/%s/events/%s", baseUrl, resultId, eventId);
+
+        try {
+            URIBuilder uriBuilder = new URIBuilder(uri);
+
+            String result = executeGet(uriBuilder);
+
+            return errorEventReader.readValue(result);
+        } catch (URISyntaxException | IOException e) {
+            throw new NeoloadClientException(CALL_TO_NEOLOAD_FAILED, e);
+        }
+    }
+
+    public EventContent getResultEventContents(String resultId, String contentId) {
+        String uri = String.format("%s/results/%s/events/contents/%s",
+                baseUrl, resultId, URLEncoder.encode(contentId, StandardCharsets.UTF_8));
+
+        try {
+            URIBuilder uriBuilder = new URIBuilder(uri);
+
+            String result = executeGet(uriBuilder);
+
+            return eventContentReader.readValue(result);
+        } catch (URISyntaxException | IOException e) {
+            throw new NeoloadClientException(CALL_TO_NEOLOAD_FAILED, e);
         }
     }
 }
