@@ -45,7 +45,6 @@ import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
@@ -219,6 +218,7 @@ public class NeoloadClient {
             if (requestToken != null) {
                 uriBuilder.addParameter("requestToken", requestToken);
             }
+            // fixedWindowDuration can be 10M or 30M only
             uriBuilder.addParameter("fixedWindowDuration", Duration.ofMinutes(10).toString());
 
             String result = executeGet(uriBuilder);
@@ -325,14 +325,15 @@ public class NeoloadClient {
         }
     }
 
-    public EventPage getResultEvents(String resultId) {
+    public EventPage getResultEventsForErrors(String resultId) {
         String uri = String.format("%s/results/%s/events", baseUrl, resultId);
 
         try {
             URIBuilder uriBuilder = new URIBuilder(uri);
             uriBuilder.addParameter("pageNumber", "0");
-            uriBuilder.addParameter("pageSize", "25");
-            uriBuilder.addParameter("sort", "-offset");
+            // TODO make paging active to make this more efficient
+            uriBuilder.addParameter("pageSize", "2000");
+            uriBuilder.addParameter("sort", "+offset");
             uriBuilder.addParameter("types", "ERROR");
 
             String result = executeGet(uriBuilder);

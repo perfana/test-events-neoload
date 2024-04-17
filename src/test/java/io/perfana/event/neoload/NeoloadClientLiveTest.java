@@ -29,6 +29,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -249,9 +250,9 @@ class NeoloadClientLiveTest {
 
         NeoloadClient client = createRealNeoloadClient();
 
-        String resultId = "1c4d582b-44f8-4459-a4d9-dd72a2937e8a";
+        String resultId = "6fef0d5b-618c-4aab-866d-8505b7314c34";
 
-        EventPage result = client.getResultEvents(resultId);
+        EventPage result = client.getResultEventsForErrors(resultId);
         System.out.println(result);
 
         List<@Valid Event> events = result.getItems();
@@ -261,16 +262,39 @@ class NeoloadClientLiveTest {
             String code = event.getCode();
             String eventId = event.getId();
             ErrorEvent resultEvent = client.getResultEvent(resultId, eventId);
-            String contentId = resultEvent.getFirstIterationCurrentResponse().getContentId();
-            EventContent eventContents = client.getResultEventContents(resultId, contentId);
-            String stringContent = eventContents.getStringContent();
+            String contentId = resultEvent.getCurrentResponse().getContentId();
+            System.out.println("Current response: " + resultEvent.getCurrentResponse());
+            if (contentId != null) {
+                EventContent eventContents = client.getResultEventContents(resultId, contentId);
+                String stringContent = eventContents.getStringContent();
 
-            System.out.println("Offset: " + offset + ", code: " + code + ", eventId: " + eventId +
-                    ", contentId: " + contentId + ", stringContent: " + stringContent);
-
+                System.out.println("Offset: " + offset + ", code: " + code + ", eventId: " + eventId +
+                        ", contentId: " + contentId + ", stringContent: " + stringContent);
+            }
         }
 
         assertFalse(result.getItems().isEmpty());
+    }
+
+    @Test
+        //@Disabled("only works with real influxdb to connect to")
+    void testUploadErrorFieldInfluxDB() throws Exception {
+
+        String influxDbUrl = "http://localhost:8086";
+        String influxDbDatabase = "neoload";
+
+        InfluxWriterConfig config = new InfluxWriterConfig(influxDbUrl, influxDbDatabase);
+
+        try (InfluxWriterNative influxWriter = new InfluxWriterNative(config, EventLoggerStdOut.INSTANCE_DEBUG)) {
+            NeoloadInfluxWriter neoloadWriter = new NeoloadInfluxWriter(influxWriter);
+
+            Map<String, String> tags = Collections.singletonMap("systemUnderTest", "Afterburner");
+            Map<String, Object> fields = new HashMap<>();
+            fields.put("contentString", "{\"developerMessage\":\"AfterburnerException: Sorry, flaky call failed after 31 milliseconds .\",\"userMessage\":\"The afterburner failed for the following reason: Sorry, flaky call failed after 31 milliseconds .\",\"errorCode\":500}");
+
+            neoloadWriter.uploadErrorToInfluxDB(Instant.now(), fields, tags);
+        }
+
     }
 
 }

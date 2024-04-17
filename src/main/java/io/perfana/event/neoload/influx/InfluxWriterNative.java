@@ -255,7 +255,7 @@ public class InfluxWriterNative implements InfluxWriter {
     }
 
     private static String escapeSlashesAndDoubleQuotes(String text) {
-        return text.replace("\"", "\\\"").replace("\\", "\\\\");
+        return text.replace("\"", "'").replace("\\", "\\\\");
     }
 
     @Override
