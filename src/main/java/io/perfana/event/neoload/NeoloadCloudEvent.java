@@ -133,8 +133,11 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
         return () -> {
             logger.info("Send errors to Influx thread");
 
-            Map<String, String> tags = createBasicTagsFromTestContext();
+            final Map<String, String> tags = createBasicTagsFromTestContext();
             Duration lastOffset = Duration.ZERO;
+            Duration highestOffset = Duration.ZERO;
+            int foundErrors = 0;
+            int sentErrors = 0;
 
             while (testIsRunning) {
                 try {
@@ -146,14 +149,13 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
 
                         List<Event> events = result.getItems();
 
-                        int foundErrors = 0;
-                        int sentErrors = 0;
-
-                        Duration currentOffset = Duration.ZERO;
                         for (Event event : events) {
                             foundErrors++;
 
-                            currentOffset = Duration.parse(event.getOffset());
+                            Duration currentOffset = Duration.parse(event.getOffset());
+                            if (currentOffset.compareTo(highestOffset) > 0) {
+                                highestOffset = currentOffset;
+                            }
 
                             Instant eventTimestamp = testStartTime.get().plus(currentOffset);
                             logger.info("currentOffset: " + currentOffset + ", lastOffset: " + lastOffset + " eventTimestamp: " + eventTimestamp + ", foundErrors: " + foundErrors);
@@ -177,14 +179,14 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
 
                                 String stringContentResponse = null;
                                 if (contentIdReponse != null) {
-                                    stringContentResponse = getStringContent(contentIdReponse);
+                                    stringContentResponse = ""; //getStringContent(contentIdReponse);
                                 }
 
                                 RequestOrResponseDetails firstIterationResponse = errorEvent.getFirstIterationCurrentResponse();
                                 String stringContentFirstIteration;
                                 if (firstIterationResponse != null) {
                                     String contentId = firstIterationResponse.getContentId();
-                                    stringContentFirstIteration = getStringContent(contentId);
+                                    stringContentFirstIteration = ""; //getStringContent(contentId);
                                 } else {
                                     stringContentFirstIteration = null;
                                 }
@@ -209,13 +211,12 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
 
                             try {
                                 // wait a little to reduce load on remote API
-                                Thread.sleep(33);
+                                Thread.sleep(3);
                             } catch (InterruptedException e) {
                                 Thread.currentThread().interrupt();
                             }
                         }
-                        lastOffset = currentOffset;
-                        logger.info("Sent " + sentErrors + " errors for " + foundErrors + " found errors.");
+
                     } else {
                         logger.info("No data available yet, not fetching errors to send to InfluxDB, will retry");
                     }
@@ -229,6 +230,11 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                 }
+
+                logger.info("Sent " + sentErrors + " errors for " + foundErrors + " total errors. Highest offset: " + highestOffset);
+                lastOffset = highestOffset;
+                foundErrors = 0;
+                sentErrors = 0;
             }
         };
     }
