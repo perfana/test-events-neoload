@@ -100,9 +100,9 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                 Instant.now(), workspaceId, testId, testExecutionId));
 
         startThread("NeoloadPollForTestRunning",
-                createPollForTestRunningThread());
+                createPollForTestStartedThread());
 
-        logger.info(String.format("before test finished at %s with test execution id: %s. Now waiting for test status RUNNING.",
+        logger.info(String.format("before test finished at %s with test execution id: %s. Now waiting for test status STARTED.",
             Instant.now(), testExecutionId));
     }
 
@@ -406,7 +406,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
         };
     }
 
-    private Runnable createPollForTestRunningThread() {
+    private Runnable createPollForTestStartedThread() {
         return () -> {
 
             long sleepInMillis = eventContext.getPollingPeriod().toMillis();
@@ -442,17 +442,19 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                         Optional<TestResult> testResultMaybe = results.getItems().stream().findFirst();
                         if (testResultMaybe.isPresent()) {
                             TestResult testResult = testResultMaybe.get();
-                            logger.info("Test result status: " + testResult.getStatus());
-                            if (testResult.getStatus() == TestResult.StatusEnum.RUNNING) {
-                                // used to get series in other thread
-                                testResultId = testResult.getId();
-                                sendEventBusVariables(Map.of("testResultId", testResultId));
-                                continuePolling = false;
-                                testRunStarted = true;
-                                testStartTime.set(testResult.getStartDate().toInstant());
-                            } else if (checkTestResultForEndState(testResult)) {
-                                continuePolling = false;
-                            }
+                            // used to get series in other thread
+                            testResultId = testResult.getId();
+                            sendEventBusVariables(Map.of("testResultId", testResultId));
+                            continuePolling = false;
+                            testRunStarted = true;
+                            testStartTime.set(testResult.getStartDate().toInstant());
+
+                            //logger.info("Test result status: " + testResult.getStatus());
+//                            if (testResult.getStatus() == TestResult.StatusEnum.RUNNING) {
+//                                // keep running
+//                            } else if (checkTestResultForEndState(testResult)) {
+//                                continuePolling = false;
+//                            }
                         } else {
                             logger.warn("No test result available, will retry");
                         }
