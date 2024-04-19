@@ -333,7 +333,7 @@ public class NeoloadClient {
             URIBuilder uriBuilder = new URIBuilder(uri);
             uriBuilder.addParameter("pageNumber", "0");
             // TODO make paging active to make this more efficient
-            uriBuilder.addParameter("pageSize", "2000");
+            uriBuilder.addParameter("pageSize", "200");
             uriBuilder.addParameter("sort", "+offset");
             uriBuilder.addParameter("types", "ERROR");
 

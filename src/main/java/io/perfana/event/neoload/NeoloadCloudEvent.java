@@ -101,12 +101,6 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
 
         startThread("NeoloadPollForTestRunning",
                 createPollForTestRunningThread());
-        startThread("ResultsFromNeoloadToInflux",
-                sendResultsFromNeoloadToInfluxThread());
-        startThread("ElementValuesAndSeriesFromNeoloadToInflux",
-                sendElementValuesAndElementSeriesFromNeoloadToInfluxThread());
-        startThread("ErrorsFromNeoloadToInflux",
-                sendErrorsFromNeoloadToInfluxThread());
 
         logger.info(String.format("before test finished at %s with test execution id: %s. Now waiting for test status RUNNING.",
             Instant.now(), testExecutionId));
@@ -153,7 +147,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                             }
 
                             Instant eventTimestamp = testStartTime.get().plus(currentOffset);
-                            logger.info("currentOffset: " + currentOffset + ", lastOffset: " + lastOffset + " eventTimestamp: " + eventTimestamp + ", foundErrors: " + foundErrors);
+                            logger.debug("currentOffset: " + currentOffset + ", lastOffset: " + lastOffset + " eventTimestamp: " + eventTimestamp + ", foundErrors: " + foundErrors);
 
                             // greater than last recorded offset
                             if (currentOffset.compareTo(lastOffset) > 0) {
@@ -174,14 +168,14 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
 
                                 String stringContentResponse = null;
                                 if (contentIdResponse != null) {
-                                    stringContentResponse = ""; //getStringContent(contentIdResponse);
+                                    stringContentResponse = getStringContent(contentIdResponse);
                                 }
 
                                 RequestOrResponseDetails firstIterationResponse = errorEvent.getFirstIterationCurrentResponse();
                                 String stringContentFirstIteration;
                                 if (firstIterationResponse != null) {
                                     String contentId = firstIterationResponse.getContentId();
-                                    stringContentFirstIteration = ""; //getStringContent(contentId);
+                                    stringContentFirstIteration = getStringContent(contentId);
                                 } else {
                                     stringContentFirstIteration = null;
                                 }
@@ -521,6 +515,18 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
 
     private String pluginName() {
         return PLUGIN_NAME + "-" + eventContext.getName();
+    }
+
+    @Override
+    public void startTest() {
+        logger.info("Start sending data from Neoload to Influx");
+
+        startThread("ResultsFromNeoloadToInflux",
+                sendResultsFromNeoloadToInfluxThread());
+        startThread("ElementValuesAndSeriesFromNeoloadToInflux",
+                sendElementValuesAndElementSeriesFromNeoloadToInfluxThread());
+        startThread("ErrorsFromNeoloadToInflux",
+                sendErrorsFromNeoloadToInfluxThread());
     }
 
     @Override
