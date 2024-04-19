@@ -281,6 +281,9 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                             Map<String, String> idToUserPath = elementValues.stream()
                                     .collect(Collectors.toMap(ResultElementValue::getId, ResultElementValue::getUserPath));
 
+                            Map<String, String> idToParent = elementValues.stream()
+                                    .collect(Collectors.toMap(ResultElementValue::getId, ResultElementValue::getParent));
+
                             // expected to replace value per loop
                             tags.put("elementType", elementType.getValue());
                             sendElementValuesToInflux(elementValues, idToName, idToUserPath, tags);
@@ -310,6 +313,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                                     // expected to replace values for each loop
                                     tags.put("name", name);
                                     tags.put("userPath", idToUserPath.get(elementId));
+                                    tags.put("parent", idToParent.get(elementId));
 
                                     influxWriter.get().uploadElementPointsTimeSeriesToInfluxDB(
                                             points,
