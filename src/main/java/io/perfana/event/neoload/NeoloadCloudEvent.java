@@ -41,7 +41,6 @@ import java.util.stream.Collectors;
 
 public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
 
-    private static final String NEOLOAD_BASE_URL = "https://neoload-v2.saas.neotys.com/v4/";
     public static final String PERFANA_NEOLOAD_PREFIX = "perfana-neoload-";
     public static final String PLUGIN_NAME = NeoloadCloudEvent.class.getSimpleName();
     public static final String TRACING_HEADER_NAME = "perfanaTestRunId";
@@ -69,11 +68,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
     public void beforeTest() {
         logger.info("before test [" + testContext.getTestRunId() + "]");
 
-        String accountToken = eventContext.getAccountToken();
-
-        boolean useProxy = eventContext.isUseProxy();
-
-        client.set(new NeoloadClient(NEOLOAD_BASE_URL, accountToken, logger, useProxy, eventContext.getProxyPort()));
+        client.set(NeoloadUtils.createNeoloadClient(eventContext, logger));
 
         InfluxWriterConfig config = eventContext.getInfluxWriterConfig();
         InfluxWriterNative writer = new InfluxWriterNative(config, logger);
@@ -175,11 +170,11 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
 
                                 String statusLineRequest = errorEvent.getCurrentRequest().getStatusLine();
                                 String statusLineResponse = errorEvent.getCurrentResponse().getStatusLine();
-                                String contentIdReponse = errorEvent.getCurrentResponse().getContentId();
+                                String contentIdResponse = errorEvent.getCurrentResponse().getContentId();
 
                                 String stringContentResponse = null;
-                                if (contentIdReponse != null) {
-                                    stringContentResponse = ""; //getStringContent(contentIdReponse);
+                                if (contentIdResponse != null) {
+                                    stringContentResponse = ""; //getStringContent(contentIdResponse);
                                 }
 
                                 RequestOrResponseDetails firstIterationResponse = errorEvent.getFirstIterationCurrentResponse();

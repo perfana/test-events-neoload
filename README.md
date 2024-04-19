@@ -25,6 +25,7 @@ When the Neoload test reaches the `RUNNING` state, the `Go!` message is sent.
 * `influxPassword` the InfluxDB password (optional, default none)
 * `pollingPeriodInSeconds` seconds between check if test is in STARTING state (optional, default 10)
 * `pollingMaxDurationInSeconds` max duration to check if test gets to STARTING state (optional, default 300)
+* `overrideRuntimeSettings` overrides the constantLoadTime with project duration of first scenatio (default: true)
 * `useProxy` activate proxy, for example to use with [mitmproxy](https://mitmproxy.org/) 
 * `proxyPort` port to use for proxy, uses localhost (optional, default 8888) 
 

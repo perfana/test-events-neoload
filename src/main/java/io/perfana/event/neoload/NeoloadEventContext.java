@@ -29,6 +29,7 @@ public class NeoloadEventContext extends EventContext {
     private final InfluxWriterConfig influxWriterConfig;
     private final boolean useProxy;
     private final int proxyPort;
+    private final boolean overrideRuntimeSettings;
 
     NeoloadEventContext(
         EventContext context,
@@ -38,6 +39,7 @@ public class NeoloadEventContext extends EventContext {
         Duration pollingMaxDuration,
         Duration sendInfluxDataDelay,
         InfluxWriterConfig influxWriterConfig,
+        boolean overrideRuntimeSettings,
         boolean useProxy,
         int proxyPort) {
             super(context, NeoloadEventFactory.class.getName());
@@ -47,6 +49,7 @@ public class NeoloadEventContext extends EventContext {
             this.pollingMaxDuration = pollingMaxDuration;
             this.influxWriterConfig = influxWriterConfig;
             this.sendInfluxDataDelay = sendInfluxDataDelay;
+            this.overrideRuntimeSettings = overrideRuntimeSettings;
             this.useProxy = useProxy;
             this.proxyPort = proxyPort;
     }
@@ -82,4 +85,9 @@ public class NeoloadEventContext extends EventContext {
     public Duration getSendInfluxDataDelay() {
         return sendInfluxDataDelay;
     }
+
+    public boolean isOverrideRuntimeSettings() {
+        return overrideRuntimeSettings;
+    }
+
 }

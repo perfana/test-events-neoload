@@ -32,6 +32,7 @@ public class NeoloadEventConfig extends EventConfig {
     private int pollingPeriodInSeconds = 10;
     private int pollingMaxDurationInSeconds = 300;
     private int sendInfluxDataDelayInSeconds = 30;
+    private boolean overrideRuntimeSettings = true;
     private boolean useProxy = false;
     private int proxyPort = 8888;
 
@@ -83,6 +84,10 @@ public class NeoloadEventConfig extends EventConfig {
         this.influxRetentionPolicy = influxRetentionPolicy;
     }
 
+    public boolean isOverrideRuntimeSettings() {
+        return overrideRuntimeSettings;
+    }
+
     private NeoloadEventContext createLoadRunnerCloudEventContext(EventContext context) {
         Duration pollingPeriod = Duration.ofSeconds(this.pollingPeriodInSeconds);
         Duration pollingMaxDuration = Duration.ofSeconds(this.pollingMaxDurationInSeconds);
@@ -103,6 +108,7 @@ public class NeoloadEventConfig extends EventConfig {
                 pollingMaxDuration,
                 sendInfluxDataDelay,
                 influxWriterConfig,
+                overrideRuntimeSettings,
                 useProxy,
                 proxyPort);
     }

@@ -34,7 +34,7 @@ dependencies {
     ext.swaggerVersion="2.2.21"
 
     implementation "com.github.stephenc.jcip:jcip-annotations:1.0-1"
-    implementation "io.perfana:event-scheduler:4.0.3"
+    implementation "io.perfana:event-scheduler:4.0.4-SNAPSHOT"
     implementation "org.apache.httpcomponents:httpclient:$httpClientVersion"
     implementation "org.apache.httpcomponents:httpmime:$httpClientVersion"
     implementation "com.fasterxml.jackson.core:jackson-core:$jacksonVersion"

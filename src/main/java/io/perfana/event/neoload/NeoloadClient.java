@@ -87,6 +87,7 @@ public class NeoloadClient {
     private final ObjectReader eventPageReader = objectMapper.readerFor(EventPage.class);
     private final ObjectReader errorEventReader = objectMapper.readerFor(ErrorEvent.class);
     private final ObjectReader eventContentReader = objectMapper.readerFor(EventContent.class);
+    private final ObjectReader projectReader = objectMapper.readerFor(Project.class);
 
     private final HttpClient httpClient;
     private final String baseUrl;
@@ -435,6 +436,7 @@ public class NeoloadClient {
     }
 
     public EventContent getResultEventContents(String resultId, String contentId) {
+        notEmpty(contentId, "contentId");
         String uri = String.format("%s/results/%s/events/contents/%s",
                 baseUrl, resultId, URLEncoder.encode(contentId, StandardCharsets.UTF_8));
 
@@ -448,4 +450,19 @@ public class NeoloadClient {
             throw new NeoloadClientException(CALL_TO_NEOLOAD_FAILED, e);
         }
     }
+
+    public Project getProject(String testId) {
+        String uri = String.format("%s/tests/%s/project", baseUrl, testId);
+
+        try {
+            URIBuilder uriBuilder = new URIBuilder(uri);
+
+            String result = executeGet(uriBuilder);
+
+            return projectReader.readValue(result);
+        } catch (URISyntaxException | IOException e) {
+            throw new NeoloadClientException(CALL_TO_NEOLOAD_FAILED, e);
+        }
+    }
+
 }
