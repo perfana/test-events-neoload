@@ -102,7 +102,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
         startThread("NeoloadPollForTestRunning",
                 createPollForTestStartedThread());
 
-        logger.info(String.format("before test finished at %s with test execution id: %s. Now waiting for test status STARTED.",
+        logger.info(String.format("before test finished at %s with test execution id: %s. Now waiting for test status STARTED_TEST.",
             Instant.now(), testExecutionId));
     }
 
@@ -417,8 +417,8 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
             long maxPollingTimestamp = System.currentTimeMillis() + eventContext.getPollingMaxDuration().toMillis();
 
             boolean continuePolling = true;
-            boolean testRunStarted = false;
             boolean checkStartTime = false;
+            StepEnum previousStep = null;
 
             while (continuePolling) {
 
@@ -429,29 +429,41 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
 
                         StepEnum step = execution.getStep();
 
-                        logger.info(String.format("Status for test execution id %s is now: %s",
-                                testExecutionId, step == null ? "<no status>" : step.name()));
+                        if (previousStep != step) {
+                            logger.info(String.format("Status for test execution id %s is now: %s",
+                                    testExecutionId, step == null ? "<no status>" : step.name()));
+                        }
+
+                        previousStep = step;
+
                         if (step == StepEnum.CANCELLED
                                 || step == StepEnum.FAILED
                                 || step == StepEnum.FAILED_TO_PREPARE_CONTROLLER
                                 || step == StepEnum.FAILED_TO_PREPARE_LGS) {
                             continuePolling = false;
+                            sendEventMessageStop();
                         }
                         if (step == StepEnum.STARTED_TEST) {
                             checkStartTime = true;
+                            sendEventMessageGo();
                         }
-                    } else if (checkStartTime) {
+                    }
+                    else {
                         // find test results
                         TestResultPage results = client.get().testResultsPage(workspaceId, List.of(TestResult.StatusEnum.values()), List.of(testId));
+
+                        // TODO assumes the first found is the right test result, via "sort=-startDate"
                         Optional<TestResult> testResultMaybe = results.getItems().stream().findFirst();
+
                         if (testResultMaybe.isPresent()) {
                             TestResult testResult = testResultMaybe.get();
                             // used to get series in other thread
                             testResultId = testResult.getId();
                             sendEventBusVariables(Map.of("testResultId", testResultId));
                             continuePolling = false;
-                            testRunStarted = true;
-                            testStartTime.set(testResult.getStartDate().toInstant());
+                            Instant startTime = testResult.getStartDate().toInstant();
+                            logger.info("Test start time according to test result call: " + startTime);
+                            testStartTime.set(startTime);
 
                             //logger.info("Test result status: " + testResult.getStatus());
 //                            if (testResult.getStatus() == TestResult.StatusEnum.RUNNING) {
@@ -477,12 +489,6 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                         logger.warn("Max polling period reached (" + eventContext.getPollingMaxDuration() + " seconds), will stop polling now.");
                         continuePolling = false;
                         sendEventMessageStop();
-                    } else {
-                        if (testRunStarted) {
-                            sendEventMessageGo();
-                        } else {
-                            sendEventMessageStop();
-                        }
                     }
                 } catch (NeoloadClientException e) {
                     logger.warn("Cannot check test result, will retry: " + e.getMessage());

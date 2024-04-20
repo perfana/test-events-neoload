@@ -29,7 +29,7 @@ public class NeoloadEventConfig extends EventConfig {
     private String influxPassword;
     private String influxDatabase;
     private String influxRetentionPolicy;
-    private int pollingPeriodInSeconds = 10;
+    private int pollingPeriodInSeconds = 4;
     private int pollingMaxDurationInSeconds = 300;
     private int sendInfluxDataDelayInSeconds = 30;
     private boolean overrideRuntimeSettings = true;

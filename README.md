@@ -14,7 +14,7 @@ The `beforeTest` starts the load test and polls the Neoload server.
 ## messages
 This is a `readyForStartParticipant`, so only when this event plugin sends a `Go!` message
 on the `eventMessageBus` the event scheduler can progress to the `startTest` event. 
-When the Neoload test reaches the `RUNNING` state, the `Go!` message is sent.
+When the Neoload test execution reaches the `STARTED_TEST` state, the `Go!` message is sent.
 
 ## properties for Neoload:
 * `neoloadAccountToken` the API SAAS token for Neoload API v4
@@ -23,7 +23,7 @@ When the Neoload test reaches the `RUNNING` state, the `Go!` message is sent.
 * `influxDatabase`the name of the InfluxDB database (default: neoload)
 * `influxUser` the InfluxDB user (optional, default none)
 * `influxPassword` the InfluxDB password (optional, default none)
-* `pollingPeriodInSeconds` seconds between check if test is in STARTING state (optional, default 10)
+* `pollingPeriodInSeconds` seconds between check if test is in STARTING state (optional, default 4)
 * `pollingMaxDurationInSeconds` max duration to check if test gets to STARTING state (optional, default 300)
 * `overrideRuntimeSettings` overrides the constantLoadTime with project duration of first scenatio (default: true)
 * `useProxy` activate proxy, for example to use with [mitmproxy](https://mitmproxy.org/) 
