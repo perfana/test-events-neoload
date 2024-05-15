@@ -38,7 +38,6 @@ When the Neoload test execution reaches the `STARTED_TEST` state, the `Go!` mess
 The Neoload plugin sends the following variables with a message on the `EventMessageBus`:
 * perfana-neoload-testId
 * perfana-neoload-testExecutionId
-* perfana-neoload-workspaceId
 
 ## use with events-*-maven-plugin
 
@@ -75,9 +74,8 @@ For example, with `perfana-test-client` plugin (from [example-pom.xml](src/test/
                 <eventConfigs>
                     <eventConfig implementation="io.perfana.event.neoload.NeoloadEventConfig">
                         <name>NeoloadEvent1</name>
-                        <neoloadAccountToken>a8579071ea254f929273c4a7dc382cd0153b745762903ab5</neoloadAccountToken>
-                        <neoloadTestId>c2b85681-66b3-4142-8bf2-46208d0d2b2a</neoloadTestId>
-                        <neoloadWorkspaceId>5e3acde2e860a132744ca916</neoloadWorkspaceId>
+                        <neoloadAccountToken>abcdef0123456789abcdef0123456789abcdef0123456789</neoloadAccountToken>
+                        <neoloadTestId>abcdef01-2345-6789-abcd-ef0123456789</neoloadTestId>
                         <influxUrl>http://localhost:8086</influxUrl>
                         <influxDatabase>neoload</influxDatabase>
                     </eventConfig>
