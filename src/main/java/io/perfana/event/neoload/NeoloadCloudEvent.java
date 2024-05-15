@@ -445,7 +445,9 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
                         }
                         if (step == StepEnum.STARTED_TEST) {
                             checkStartTime = true;
-                            sendEventMessageGo();
+                            if (eventContext.isReadyForStartParticipant()) {
+                                sendEventMessageGo();
+                            }
                         }
                     }
                     else {
