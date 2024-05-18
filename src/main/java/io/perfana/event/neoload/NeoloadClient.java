@@ -374,6 +374,7 @@ public class NeoloadClient {
         HttpPatch patch = new HttpPatch(uriBuilder.build());
         patch.setHeader("accountToken", accountToken);
         patch.setHeader("accept", "application/json");
+        patch.setHeader("content-type", "application/json");
         patch.setEntity(new StringEntity(requestBody));
 
         HttpResponse response = executeRequest(patch);
