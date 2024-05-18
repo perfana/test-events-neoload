@@ -77,6 +77,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
         }
         influxWriter.set(new NeoloadInfluxWriter(writer));
 
+        sendTracingHeader(testId);
 
         TestExecutionInput input = new TestExecutionInput();
         input.setTestId(testId);
@@ -90,8 +91,6 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
 
         this.testExecutionId = testExecution.getId();
         this.workspaceId = testExecution.getWorkspaceId();
-
-//        sendTracingHeader(testId);
 
         Map<String, String> variables = Map.of(
                 PERFANA_NEOLOAD_PREFIX + "testExecutionId", testExecutionId,
