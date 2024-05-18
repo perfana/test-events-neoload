@@ -43,7 +43,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
 
     public static final String PERFANA_NEOLOAD_PREFIX = "perfana-neoload-";
     public static final String PLUGIN_NAME = NeoloadCloudEvent.class.getSimpleName();
-    public static final String TRACING_HEADER_NAME = "perfanaTestRunId";
+    public static final String TRACING_HEADER_NAME = "testRunId";
 
     private final AtomicReference<NeoloadClient> client = new AtomicReference<>();
     private final AtomicReference<NeoloadInfluxWriter> influxWriter = new AtomicReference<>();
@@ -76,6 +76,8 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
             throw new NeoloadEventException("Influx writer is not healthy.");
         }
         influxWriter.set(new NeoloadInfluxWriter(writer));
+
+        sendTracingHeader(testId);
 
         TestExecutionInput input = new TestExecutionInput();
         input.setTestId(testId);
@@ -521,10 +523,9 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
         eventMessageBus.send(goMessage);
     }
 
-    private void sendTracingHeader(String projectId, String loadTestId) {
+    private void sendTracingHeader(String loadTestId) {
         String testRunId = testContext.getTestRunId();
-        logger.warn("send tracing header IS NOT IMPLEMENTED '" + TRACING_HEADER_NAME + ": " + testRunId + "'");
-
+        client.get().sendTracingHeader(loadTestId, testRunId);
     }
 
     private String pluginName() {

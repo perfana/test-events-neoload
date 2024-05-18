@@ -28,10 +28,7 @@ import org.apache.http.HttpHost;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.config.RequestConfig;
-import org.apache.http.client.methods.HttpDelete;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpUriRequest;
+import org.apache.http.client.methods.*;
 import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.HttpClientBuilder;
@@ -48,6 +45,9 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
+
+import static io.perfana.event.neoload.NeoloadCloudEvent.TRACING_HEADER_NAME;
 
 public class NeoloadClient {
 
@@ -370,6 +370,18 @@ public class NeoloadClient {
         return result;
     }
 
+    private String executePatch(URIBuilder uriBuilder, String requestBody) throws URISyntaxException, IOException {
+        HttpPatch patch = new HttpPatch(uriBuilder.build());
+        patch.setHeader("accountToken", accountToken);
+        patch.setHeader("accept", "application/json");
+        patch.setEntity(new StringEntity(requestBody));
+
+        HttpResponse response = executeRequest(patch);
+        String result = responseToString(response);
+        logger.debug(result);
+        return result;
+    }
+
     private static String responseToString(HttpResponse response) throws IOException {
         StringBuilder result = new StringBuilder(1024);
         try (BufferedReader rd = new BufferedReader(
@@ -465,4 +477,18 @@ public class NeoloadClient {
         }
     }
 
+    public void sendTracingHeader(String testId, String testRunId) {
+        String uri = String.format("%s/tests/%s", baseUrl, testId);
+
+        try {
+            URIBuilder uriBuilder = new URIBuilder(uri);
+            PatchTestInput patchTestInput = new PatchTestInput();
+            patchTestInput.controllerEnvironmentVariables(Map.of(TRACING_HEADER_NAME, testRunId));
+            String requestBody = objectMapper.writeValueAsString(patchTestInput);
+            executePatch(uriBuilder, requestBody);
+            logger.info("sent tracing header '" + TRACING_HEADER_NAME + ": " + testRunId + "'");
+        } catch (URISyntaxException | IOException e) {
+            throw new NeoloadClientException(CALL_TO_NEOLOAD_FAILED, e);
+        }
+    }
 }
