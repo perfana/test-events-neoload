@@ -485,8 +485,9 @@ public class NeoloadClient {
             URIBuilder uriBuilder = new URIBuilder(uri);
             PatchTestInput patchTestInput = new PatchTestInput();
             patchTestInput.controllerEnvironmentVariables(Map.of(TRACING_HEADER_NAME, testRunId));
-            patchTestInput.controllerZoneId("defaultzone");
-            patchTestInput.setLgsByZone(Map.of("defaultzone", 1));
+            patchTestInput.controllerZoneId("EUGGCP");
+            patchTestInput.setLgsByZone(Map.of("EUGGCP", 1));
+            patchTestInput.setSelectedScenarioName("scenario1");
             String requestBody = objectMapper.writeValueAsString(patchTestInput);
             executePatch(uriBuilder, requestBody);
             logger.info("sent tracing header '" + TRACING_HEADER_NAME + ": " + testRunId + "'");
