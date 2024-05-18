@@ -91,7 +91,7 @@ public class NeoloadCloudEvent extends EventAdapter<NeoloadEventContext> {
         this.testExecutionId = testExecution.getId();
         this.workspaceId = testExecution.getWorkspaceId();
 
-        sendTracingHeader(testId);
+//        sendTracingHeader(testId);
 
         Map<String, String> variables = Map.of(
                 PERFANA_NEOLOAD_PREFIX + "testExecutionId", testExecutionId,
